@@ -7,8 +7,10 @@ import { Button } from '@/components/ui/button'
 import YouTube from 'react-youtube'
 
 export default function Home() {
-  const videoId = 'xk2LA59EAdg&t=48s' // Default video ID
+  const videoId = 'xk2LA59EAdg' // Default video ID
   const [windowWidth, setWindowWidth] = useState(0)
+  // inicia en el segundo 48 el video:
+  
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth)
@@ -29,6 +31,7 @@ export default function Home() {
       loop: 1,
       playlist: videoId,
       modestbranding: 1,
+      start: 48, // Start the video at the 48th second
     },
   }
 
