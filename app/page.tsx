@@ -4,16 +4,22 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import YouTube from 'react-youtube'
+import YouTube, { YouTubeEvent } from 'react-youtube'
 
 export default function Home() {
   const videoId = 'xk2LA59EAdg' // Default video ID
   const [windowWidth, setWindowWidth] = useState(0)
   const [isLightMode, setIsLightMode] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+  const [isClient, setIsClient] = useState(false)
   // inicia en el segundo 48 el video:
   
   useEffect(() => {
-    const handleResize = () => setWindowWidth(window.innerWidth)
+    setIsClient(true)
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth)
+      setIsMobile(window.innerWidth < 640)
+    }
     handleResize()
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
@@ -27,6 +33,10 @@ export default function Home() {
     handleModeChange()
     window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', handleModeChange)
     return () => window.matchMedia('(prefers-color-scheme: light)').removeEventListener('change', handleModeChange)
+  }, [])
+
+  useEffect(() => {
+    window.scrollTo(0, document.body.scrollHeight)
   }, [])
 
   const opts = {
@@ -46,20 +56,38 @@ export default function Home() {
     },
   }
 
+  const onReady = (event: YouTubeEvent) => {
+    // Accede al reproductor de YouTube
+    const player = event.target
+    if (player) {
+      player.playVideo()
+    }
+  }
+
+  const onError = (e: YouTubeEvent) => {
+    console.error('YouTube Player Error:', e)
+  }
+
   return (
     <div className="relative flex flex-col items-center justify-center h-screen overflow-hidden">
       <div className="absolute inset-0 w-full h-full">
-        <YouTube
-          videoId={videoId}
-          opts={opts}
-          className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[150%] h-[150%] min-w-[100%] min-h-[100%]" // Reduce el zoom
-          style={{ pointerEvents: 'none' }}
-        />
+        {isClient && (
+          <YouTube
+            videoId={videoId}
+            opts={opts}
+            className={`absolute top-1/2 left-1/2 transform ${
+              isMobile ? '-translate-x-1/4 -translate-y-1/2 w-[400%] h-[150%] min-w-[100%] min-h-[100%]' : '-translate-x-1/2 -translate-y-1/2 w-[150%] h-[150%] min-w-[100%] min-h-[100%]'
+            }`} // Ajusta el zoom según el modo
+            style={{ pointerEvents: 'none' }}
+            onReady={onReady}
+            onError={onError}
+          />
+        )}
         <div className="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
       </div>
       <div className="relative z-10 text-center text-white">
         <h1 className="text-4xl font-bold mb-4">Miguel Vargas</h1>
-        <p className="text-xl mb-8">Computer Engineer | DevOps Specialist | Web Developer</p>
+        <p className="text-xl mb-8">Computer Engineer | DevOps Specialist | Web Developer | XR Experiences</p>
         <div className="space-y-4">
           <Button asChild variant="outline" className="animate-bounce bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
             <Link href="/about">
