@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import YouTube from 'react-youtube'
 
 export default function Home() {
-  const videoId = 'ScMzIvxBSi4' // Default video ID
+  const videoId = 'xk2LA59EAdg&t=48s' // Default video ID
   const [windowWidth, setWindowWidth] = useState(0)
 
   useEffect(() => {
