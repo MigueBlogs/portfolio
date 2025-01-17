@@ -1,6 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Image from 'next/image'
 
+const profilePhoto = "/media/yo.jpg"
+const triathlonPhoto = "/media/triathlon.jpg"
+
 export default function About() {
   return (
     <div className="container mx-auto p-4 page-transition relative">
@@ -12,7 +15,7 @@ export default function About() {
         <CardContent>
           <div className="relative">
             <Image
-              src="/media/yo.jpg"
+              src={profilePhoto}
               alt="Miguel Vargas"
               width={100}
               height={100}
@@ -21,6 +24,8 @@ export default function About() {
           </div>
           <p className="mb-4">Provo, Utah, United States</p>
           <p className="mb-4">+525583582540 | migueblogs@gmail.com</p>
+          <p className="mb-4">Age: 30</p>
+          <p className="mb-4">LinkedIn: <a href="https://linkedin.com/in/vargas-miguel/" target="_blank" rel="noopener noreferrer">linkedin.com/in/vargas-miguel/</a></p>
           <h2 className="text-xl font-semibold mb-2">Professional Summary</h2>
           <p>
             Computer Engineer with 5+ years of experience specializing in DevOps, web, VR, and backend development. Proven 
@@ -29,6 +34,27 @@ export default function About() {
             impactful solutions. Eligible for a TN visa under the USMCA agreement, requiring only an offer letter with a straightforward 
             and cost-effective process for the employer.
           </p>
+          <h2 className="text-xl font-semibold mb-2 mt-4">Interests</h2>
+          <p>
+            Passionate about staying active through fitness and sports, enjoying creativity with guitar playing, and exploring innovative technologies like rockets, space exploration, and video games. Avid traveler who values cultural experiences and embraces life's opportunities to learn and grow.
+          </p>
+          <h2 className="text-xl font-semibold mb-2 mt-4">Motivation</h2>
+          <p>
+            Driven by a desire to blend technical expertise with creativity, I am motivated by the opportunity to develop impactful technologies that improve lives. My passion for Virtual Reality and game development fuels my ambition to create immersive solutions, empowering users to explore new possibilities. I thrive in dynamic environments where teamwork and innovation drive meaningful change, aiming to contribute to cutting-edge projects that shape the future.
+          </p>
+          <p>
+            Here is a photo of me motivated, running a triathlon:
+          </p>
+          <div className="relative mt-4">
+            <Image
+              src={triathlonPhoto}
+              alt="Miguel Vargas running a triathlon"
+              width={400}
+              height={300}
+              className="w-full h-auto border-4 border-blue-500 rounded-lg shadow-lg"
+            />
+            <p className="text-center mt-2">Miguel Vargas running a triathlon</p>
+          </div>
         </CardContent>
       </Card>
     </div>

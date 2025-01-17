@@ -58,7 +58,19 @@
   }
 }
 
-.page-transition {
-  @apply transition-all duration-300 ease-in-out;
+.text-primary {
+  color: var(--primary);
+}
+
+.text-muted-foreground {
+  color: var(--muted-foreground);
+}
+
+.border-muted-foreground {
+  border-color: var(--muted-foreground);
+}
+
+.bg-primary-20 {
+  background-color: rgba(var(--primary), 0.2);
 }
 
