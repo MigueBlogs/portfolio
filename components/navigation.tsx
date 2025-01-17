@@ -3,17 +3,17 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Menu, X } from 'lucide-react'
+import { Menu, X, Home, User, Briefcase, Code, Globe, Star, Mail } from 'lucide-react'
 import { ModeToggle } from './mode-toggle'
 
 const navItems = [
-  { href: '/', label: 'Home' },
-  { href: '/about', label: 'About' },
-  { href: '/experience', label: 'Experience' },
-  { href: '/projects', label: 'Projects' },
-  { href: '/websites', label: 'Websites' },
-  { href: '/skills', label: 'Skills' },
-  { href: '/contact', label: 'Contact' },
+  { href: '/', label: 'Home', icon: Home },
+  { href: '/about', label: 'About', icon: User },
+  { href: '/experience', label: 'Experience', icon: Briefcase },
+  { href: '/projects', label: 'Projects', icon: Code },
+  { href: '/websites', label: 'Websites', icon: Globe },
+  { href: '/skills', label: 'Skills', icon: Star },
+  { href: '/contact', label: 'Contact', icon: Mail },
 ]
 
 export default function Navigation() {
@@ -40,6 +40,7 @@ export default function Navigation() {
                     : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'
                 }`}
               >
+                <item.icon className="mr-2 h-4 w-4" />
                 {item.label}
               </Link>
             ))}
@@ -77,6 +78,7 @@ export default function Navigation() {
                 }`}
                 onClick={() => setIsOpen(false)}
               >
+                <item.icon className="mr-2 h-4 w-4 inline" />
                 {item.label}
               </Link>
             ))}
