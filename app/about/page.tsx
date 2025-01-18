@@ -42,19 +42,6 @@ export default function About() {
           <p>
             Driven by a desire to blend technical expertise with creativity, I am motivated by the opportunity to develop impactful technologies that improve lives. My passion for Virtual Reality and game development fuels my ambition to create immersive solutions, empowering users to explore new possibilities. I thrive in dynamic environments where teamwork and innovation drive meaningful change, aiming to contribute to cutting-edge projects that shape the future.
           </p>
-          <p>
-            Here is a photo of me motivated, running a triathlon:
-          </p>
-          <div className="relative mt-4">
-            <Image
-              src={triathlonPhoto}
-              alt="Miguel Vargas running a triathlon"
-              width={400}
-              height={300}
-              className="w-full h-auto border-4 border-blue-500 rounded-lg shadow-lg"
-            />
-            <p className="text-center mt-2">Miguel Vargas running a triathlon</p>
-          </div>
         </CardContent>
       </Card>
     </div>

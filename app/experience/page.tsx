@@ -20,7 +20,13 @@ const experiences = [
       "Gained experience in leading small teams and managing cross-functional collaboration, including developers, designers, and communicators.",
       "Cultivated a leadership style focused on innovation, problem-solving, and team motivation.",
       "Gained experience in protecting intellectual property rights, safeguarding the codebase and associated digital assets."
-    ]
+    ],
+    images: [ "/media/metaplay.jpg", 
+              "/media/metaplay2.jpg",
+              "/media/metaplay3.jpg",
+              "/media/metaplay4.jpg",
+              "/media/metaplay5.jpg",
+              "/media/metaplay6.jpg"]
   },
   {
     title: "Senior Programmer Analyst (DevOps)",
@@ -40,8 +46,17 @@ const experiences = [
       "Incident analysis and resolution to related issues, builder new features, QA tester and post implementation testing",
       "Conducted code reviews to maintain high-quality software development standards.",
       "Analyzed user requirements to create detailed program specifications.",
-      "Built cutting-edge programs based on detailed workflow charts and diagrams."
-    ]
+      "Built cutting-edge programs based on detailed workflow charts and diagrams.",
+      "Banking Olympics: Triathlon"
+    ],
+    images: [ "/media/banregio.jpeg", 
+              "/media/banregio2.jpeg",
+             // "/media/banregio3.jpeg",
+              "/media/banregio4.jpeg",
+              //"/media/banregio5.jpeg",
+              "/media/banregio6.jpeg",
+              //"/media/banregio7.jpeg",
+              "/media/banregio8.jpeg",]
   },
   {
     title: "Head of program and project development department",
@@ -50,8 +65,13 @@ const experiences = [
     date: "June 2019 - December 2021",
     year: 2019,
     description: [
-      "Developer of web portals and online applications focused on providing information to the population and improving the country's resilience to disturbing events of natural origin."
-    ]
+      "Developer of web portals and online applications focused on providing information to the population and improving the country's resilience to disturbing events of natural origin.",
+      "Developed 30+ GIS-based mapping systems to provide real-time disaster prevention information, empowering citizens with actionable insights for enhanced safety.",
+      "Increased public engagement by driving over 2.3 million visits to the official National Civil Defense website, providing preparedness tools.",
+      "Facilitated the registry portal of 500,000+ buildings for Mexico’s National Earthquake Drill, enhancing nationwide disaster readiness.",
+
+    ],
+    images: ["/media/CNPC1.jpg", "/media/CNPC.jpg", "/media/CNPC2.jpg"]
   },
   {
     title: "IT assistant",
@@ -122,6 +142,7 @@ const experiences = [
 
 export default function Experience() {
   const [activeYear, setActiveYear] = useState<number | null>(null);
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const timelineRef = useRef<HTMLUListElement>(null);
 
   // Actualiza el año activo usando IntersectionObserver
@@ -149,6 +170,14 @@ export default function Experience() {
     if (element) {
       element.scrollIntoView({ behavior: "smooth", block: "center" });
     }
+  };
+
+  const handleImageClick = (image: string) => {
+    setExpandedImage(image);
+  };
+
+  const handleOverlayClick = () => {
+    setExpandedImage(null);
   };
 
   return (
@@ -214,10 +243,30 @@ export default function Experience() {
                   <li key={i}>{item}</li>
                 ))}
               </ul>
+              <div className="grid grid-cols-3 gap-2 mt-4">
+                {exp.images && exp.images.map((image, i) => (
+                  <img
+                    key={i}
+                    src={image}
+                    alt={`Experience image ${i + 1}`}
+                    className="cursor-pointer"
+                    onClick={() => handleImageClick(image)}
+                  />
+                ))}
+              </div>
             </CardContent>
           </Card>
         ))}
       </div>
+
+      {expandedImage && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"
+          onClick={handleOverlayClick}
+        >
+          <img src={expandedImage} alt="Expanded" className="max-w-full max-h-full" />
+        </div>
+      )}
     </div>
   );
 }
