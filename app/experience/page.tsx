@@ -245,13 +245,14 @@ export default function Experience() {
               </ul>
               <div className="grid grid-cols-3 gap-2 mt-4">
                 {exp.images && exp.images.map((image, i) => (
-                  <img
-                    key={i}
-                    src={image}
-                    alt={`Experience image ${i + 1}`}
-                    className="cursor-pointer"
-                    onClick={() => handleImageClick(image)}
-                  />
+                  <div key={i} className="relative">
+                    <img
+                      src={image}
+                      alt={`Experience image ${i + 1}`}
+                      className="cursor-pointer object-cover w-full h-24"
+                      onClick={() => handleImageClick(image)}
+                    />
+                  </div>
                 ))}
               </div>
             </CardContent>
