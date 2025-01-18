@@ -48,12 +48,14 @@ export default function Projects() {
             <CardContent>
               {project.image && (
                 <div className="mb-4">
-                  <img src={project.image} alt={`${project.title} image`} className="border-2 border-primary rounded-lg shadow-md" />
+                  <a href={project.link} target="_blank" rel="noopener noreferrer">
+                    <img src={project.image} alt={`${project.title} image`} className="border-2 border-primary rounded-lg shadow-md cursor-pointer" />
+                  </a>
                 </div>
               )}
               {project.video && (
                 <div className="mb-4">
-                  <video src={project.video} className="border-2 border-primary rounded-lg shadow-md" autoPlay muted loop />
+                  <video src={project.video} className="border-2 border-primary rounded-lg shadow-md" controls />
                 </div>
               )}
               

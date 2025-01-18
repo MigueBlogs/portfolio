@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Menu, X, Home, User, Briefcase, Code, Globe, Star, Mail } from 'lucide-react'
+import { Menu, X, Home, User, Briefcase, Code, Globe, Star, Camera } from 'lucide-react'
 import { ModeToggle } from './mode-toggle'
 
 const navItems = [
@@ -13,7 +13,7 @@ const navItems = [
   { href: '/projects', label: 'Projects', icon: Code },
   { href: '/websites', label: 'Websites', icon: Globe },
   { href: '/skills', label: 'Skills', icon: Star },
-  { href: '/contact', label: 'Contact', icon: Mail },
+  { href: '/media', label: 'Media', icon: Camera },
 ]
 
 export default function Navigation() {
