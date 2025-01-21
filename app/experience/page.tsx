@@ -145,22 +145,22 @@ export default function Experience() {
   const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(null);
   const [currentCarouselImages, setCurrentCarouselImages] = useState<string[]>([]);
   const [isManualSelection, setIsManualSelection] = useState(false); // Control para selección manual
-  const [isScrolling, setIsScrolling] = useState(false); // Control para el estado del scroll
   const timelineRef = useRef<HTMLUListElement>(null);
   const isAnimating = useRef(false); // Bandera para el estado del scroll animado
 
 
   // Función para desplazar suavemente al año seleccionado
   const scrollToYear = (year: number) => {
-    // const element = document.querySelector(`[data-year="${year}"]`);
-    // if (element) {
-    //   element.scrollIntoView({ behavior: "smooth", block: "start" });
-    // }
-
     const element = document.querySelector(`[data-year="${year}"]`);
     if (element) {
       isAnimating.current = true; // Marca el scroll como animado
-      element.scrollIntoView({ behavior: "smooth", block: "start" });
+
+      // Calcula la posición ajustada restando 80px
+      const offset = 80; // Ajusta este valor si es necesario
+      const yPosition = element.getBoundingClientRect().top + window.scrollY - offset;
+
+      // Desplaza suavemente a la posición ajustada
+      window.scrollTo({ top: yPosition, behavior: "smooth" });
 
       // Establece un tiempo límite para desactivar la animación
       setTimeout(() => {
@@ -169,14 +169,12 @@ export default function Experience() {
     }
   };
 
+
   // Función para manejar el click en un año del timeline
   const handleYearClick = (year: number) => {
     setActiveYear(year);
     setIsManualSelection(true); // Indica que el año fue seleccionado manualmente
     scrollToYear(year);
-
-    //setTimeout(() => {setIsManualSelection(false); }, 2000);
-
   };
 
   // Función para manejar el clic en una imagen
@@ -208,12 +206,11 @@ export default function Experience() {
   const handleScroll = () => {
     if (!isAnimating.current) {
       if (!isManualSelection) {
-        //console.log("Scrolling");
-        setIsScrolling(true); // Indicar que estamos haciendo scroll
-      }else{
+        //setIsScrolling(true); // Indicar que estamos haciendo scroll
+      } else {
         setIsManualSelection(false); // Indicar que el scroll fue manual
       }
-    } 
+    }
   };
 
   // Actualiza el año activo usando IntersectionObserver
@@ -234,8 +231,6 @@ export default function Experience() {
 
     const elements = document.querySelectorAll(".experience-card");
     elements.forEach((el) => observer.observe(el));
-
-
 
     window.addEventListener('scroll', handleScroll);
 
@@ -258,7 +253,7 @@ export default function Experience() {
               <li
                 key={index}
                 className={`cursor-pointer transition-colors duration-300 ${activeYear === exp.year ? "text-primary font-bold" : "text-muted-foreground"}`}
-                onClick={() => handleYearClick(exp.year)} // Cambia aquí la función de onClick
+                onClick={() => handleYearClick(exp.year)}
               >
                 <span>{exp.year}</span>
               </li>
@@ -290,7 +285,7 @@ export default function Experience() {
         {experiences.map((exp, index) => (
           <Card
             key={index}
-            className="experience-card"
+            className={`experience-card ${activeYear === exp.year ? "border-2 border-primary shadow-lg" : ""}`}
             data-year={exp.year}
           >
             <CardHeader>
