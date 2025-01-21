@@ -142,43 +142,108 @@ const experiences = [
 
 export default function Experience() {
   const [activeYear, setActiveYear] = useState<number | null>(null);
-  const [expandedImage, setExpandedImage] = useState<string | null>(null);
+  const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(null);
+  const [currentCarouselImages, setCurrentCarouselImages] = useState<string[]>([]);
+  const [isManualSelection, setIsManualSelection] = useState(false); // Control para selección manual
+  const [isScrolling, setIsScrolling] = useState(false); // Control para el estado del scroll
   const timelineRef = useRef<HTMLUListElement>(null);
+  const isAnimating = useRef(false); // Bandera para el estado del scroll animado
+
+
+  // Función para desplazar suavemente al año seleccionado
+  const scrollToYear = (year: number) => {
+    // const element = document.querySelector(`[data-year="${year}"]`);
+    // if (element) {
+    //   element.scrollIntoView({ behavior: "smooth", block: "start" });
+    // }
+
+    const element = document.querySelector(`[data-year="${year}"]`);
+    if (element) {
+      isAnimating.current = true; // Marca el scroll como animado
+      element.scrollIntoView({ behavior: "smooth", block: "start" });
+
+      // Establece un tiempo límite para desactivar la animación
+      setTimeout(() => {
+        isAnimating.current = false; // Desmarca la animación
+      }, 1000); // Ajusta el tiempo según la duración de tu animación
+    }
+  };
+
+  // Función para manejar el click en un año del timeline
+  const handleYearClick = (year: number) => {
+    setActiveYear(year);
+    setIsManualSelection(true); // Indica que el año fue seleccionado manualmente
+    scrollToYear(year);
+
+    //setTimeout(() => {setIsManualSelection(false); }, 2000);
+
+  };
+
+  // Función para manejar el clic en una imagen
+  const handleImageClick = (images: string[], index: number) => {
+    setCurrentCarouselImages(images);
+    setExpandedImageIndex(index);
+  };
+
+  // Función para cerrar el carrusel
+  const closeCarousel = () => {
+    setExpandedImageIndex(null);
+  };
+
+  // Función para ir a la imagen anterior en el carrusel
+  const prevImage = () => {
+    if (expandedImageIndex !== null && expandedImageIndex > 0) {
+      setExpandedImageIndex(expandedImageIndex - 1);
+    }
+  };
+
+  // Función para ir a la imagen siguiente en el carrusel
+  const nextImage = () => {
+    if (expandedImageIndex !== null && expandedImageIndex < currentCarouselImages.length - 1) {
+      setExpandedImageIndex(expandedImageIndex + 1);
+    }
+  };
+
+  // Detectar cuando se hace scroll manual
+  const handleScroll = () => {
+    if (!isAnimating.current) {
+      if (!isManualSelection) {
+        //console.log("Scrolling");
+        setIsScrolling(true); // Indicar que estamos haciendo scroll
+      }else{
+        setIsManualSelection(false); // Indicar que el scroll fue manual
+      }
+    } 
+  };
 
   // Actualiza el año activo usando IntersectionObserver
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const year = entry.target.getAttribute("data-year");
-            if (year) setActiveYear(parseInt(year));
-          }
-        });
+        if (!isManualSelection) {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              const year = entry.target.getAttribute("data-year");
+              if (year) setActiveYear(parseInt(year));
+            }
+          });
+        }
       },
-      { threshold: 0.5 } // Detecta el 50% visible
+      { threshold: [1.0] } // Detecta el 100% visible
     );
 
     const elements = document.querySelectorAll(".experience-card");
     elements.forEach((el) => observer.observe(el));
 
-    return () => observer.disconnect();
-  }, []);
 
-  const scrollToYear = (year: number) => {
-    const element = document.querySelector(`[data-year="${year}"]`);
-    if (element) {
-      element.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-  };
 
-  const handleImageClick = (image: string) => {
-    setExpandedImage(image);
-  };
+    window.addEventListener('scroll', handleScroll);
 
-  const handleOverlayClick = () => {
-    setExpandedImage(null);
-  };
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      observer.disconnect();
+    };
+  }, [isManualSelection]); // Cuando cambia `isManualSelection`, reinicia el efecto
 
   return (
     <div className="container mx-auto p-4 page-transition flex">
@@ -192,10 +257,8 @@ export default function Experience() {
             {experiences.map((exp, index) => (
               <li
                 key={index}
-                className={`cursor-pointer transition-colors duration-300 ${
-                  activeYear === exp.year ? "text-primary font-bold" : "text-muted-foreground"
-                }`}
-                onClick={() => scrollToYear(exp.year)}
+                className={`cursor-pointer transition-colors duration-300 ${activeYear === exp.year ? "text-primary font-bold" : "text-muted-foreground"}`}
+                onClick={() => handleYearClick(exp.year)} // Cambia aquí la función de onClick
               >
                 <span>{exp.year}</span>
               </li>
@@ -250,7 +313,7 @@ export default function Experience() {
                       src={image}
                       alt={`Experience image ${i + 1}`}
                       className="cursor-pointer object-cover w-full h-24"
-                      onClick={() => handleImageClick(image)}
+                      onClick={() => handleImageClick(exp.images, i)}
                     />
                   </div>
                 ))}
@@ -260,15 +323,36 @@ export default function Experience() {
         ))}
       </div>
 
-      {expandedImage && (
+      {/* Carousel */}
+      {expandedImageIndex !== null && (
         <div
           className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"
-          onClick={handleOverlayClick}
         >
-          <img src={expandedImage} alt="Expanded" className="max-w-full max-h-full" />
+          <button
+            className="absolute top-4 right-4 text-white text-2xl"
+            onClick={closeCarousel}
+          >
+            ✖
+          </button>
+          <button
+            className="absolute left-4 text-white text-2xl"
+            onClick={prevImage}
+          >
+            ◀
+          </button>
+          <img
+            src={currentCarouselImages[expandedImageIndex]}
+            alt="Expanded"
+            className="max-w-full max-h-full"
+          />
+          <button
+            className="absolute right-4 text-white text-2xl"
+            onClick={nextImage}
+          >
+            ▶
+          </button>
         </div>
       )}
     </div>
   );
 }
-
