@@ -12,8 +12,8 @@ export default function Home() {
   const [isLightMode, setIsLightMode] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [isClient, setIsClient] = useState(false)
-  // inicia en el segundo 48 el video:
-  
+  const [isButtonVisible, setIsButtonVisible] = useState(false) // Estado para controlar la visibilidad del botón
+
   useEffect(() => {
     setIsClient(true)
     const handleResize = () => {
@@ -36,7 +36,15 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    window.scrollTo(0, document.body.scrollHeight)
+    // Mostrar el botón después de 3 segundos
+    const timer = setTimeout(() => {
+      setIsButtonVisible(true)
+    }, 3000)
+    return () => clearTimeout(timer)
+  }, [])
+
+  useEffect(() => {
+    //window.scrollTo(0, document.body.scrollHeight)
   }, [])
 
   const opts = {
@@ -51,7 +59,7 @@ export default function Home() {
       loop: 1,
       playlist: videoId,
       modestbranding: 1,
-      start: 48, // Start the video at the 48th second
+      start: 49, // Start the video at the 48th second
       playbackRate: 1.5, // Reproduce el video a 1.5x velocidad
     },
   }
@@ -86,16 +94,39 @@ export default function Home() {
         <div className="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
       </div>
       <div className="relative z-10 text-center text-white">
-        <h1 className="text-4xl font-bold mb-4">Miguel Vargas</h1>
-        <p className="text-xl mb-8">Computer Engineer | DevOps Specialist | Web Developer | XR Experiences</p>
+        <h1 className="text-4xl font-bold mb-4 animate-fade-in invisible">Miguel Vargas</h1>
+        <p className="text-xl mb-8 animate-fade-in-delay invisible">Computer Engineer | DevOps Specialist | Web Developer | XR Experiences</p>
         <div className="space-y-4">
-          <Button asChild variant="outline" className="animate-bounce bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-            <Link href="/about">
-              {isLightMode ? 'Learn More' : 'Learn More'} <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
-          </Button>
+          {isButtonVisible && (
+            <Button asChild variant="outline" className="animate-bounce bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+              <Link href="/about">
+                {isLightMode ? 'Learn More' : 'Learn More'} <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
+      <style jsx>{`
+        @keyframes fadeIn {
+          0% { opacity: 0; transform: translateY(-20px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+          animation: fadeIn 1s ease-in-out forwards;
+          animation-delay: 0s;
+        }
+        .animate-fade-in-delay {
+          animation: fadeIn 1s ease-in-out forwards;
+          animation-delay: 1s;
+        }
+        .invisible {
+          visibility: hidden;
+        }
+        .animate-fade-in,
+        .animate-fade-in-delay {
+          visibility: visible;
+        }
+      `}</style>
     </div>
   )
 }

@@ -23,12 +23,18 @@ export default function About() {
             />
           </div>
           <p className="mb-4">Provo, Utah, United States</p>
-          <p className="mb-4">+525583582540 | migueblogs@gmail.com</p>
+          <p className="mb-4">
+            <a href="https://wa.me/525583582540" target="_blank" rel="noopener noreferrer">+525583582540</a>
+            <span className="hidden sm:inline"> | </span>
+            <span className="block sm:inline">
+              <a href="mailto:migueblogs@gmail.com" target="_blank" rel="noopener noreferrer">migueblogs@gmail.com</a>
+            </span>
+          </p>
           <p className="mb-4">Age: 30</p>
           <p className="mb-4">LinkedIn: <a href="https://linkedin.com/in/vargas-miguel/" target="_blank" rel="noopener noreferrer">linkedin.com/in/vargas-miguel/</a></p>
           <h2 className="text-xl font-semibold mb-2">Professional Summary</h2>
           <p>
-            Computer Engineer with 5+ years of experience specializing in DevOps, web, VR, and backend development. Proven 
+            Computer Engineer with 5+ years of experience specializing in DevOps, web, VR, and full stack development. Proven 
             expertise in leading innovative projects, including a VR-based earthquake simulator, combining a passion for Virtual Reality 
             and game development. Skilled in REST APIs, continuous integration, and web development, delivering efficient and 
             impactful solutions. Eligible for a TN visa under the USMCA agreement, requiring only an offer letter with a straightforward 
