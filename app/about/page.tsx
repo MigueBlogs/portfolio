@@ -1,10 +1,30 @@
+"use client"
+
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Image from 'next/image'
 
 const profilePhoto = "/media/yo.jpg"
 const triathlonPhoto = "/media/triathlon.jpg"
+const shortResume = "/Legal.pdf"
+const longResume = "/long.pdf"
 
 export default function About() {
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768)
+    }
+
+    handleResize()
+    window.addEventListener('resize', handleResize)
+
+    return () => {
+      window.removeEventListener('resize', handleResize)
+    }
+  }, [])
+
   return (
     <div className="container mx-auto p-4 page-transition relative">
       <h1 className="text-3xl font-bold mb-6">About Me</h1>
@@ -42,7 +62,7 @@ export default function About() {
           </p>
           <h2 className="text-xl font-semibold mb-2 mt-4">Interests</h2>
           <p>
-            Passionate about staying active through fitness and sports, enjoying creativity with guitar playing, and exploring innovative technologies like rockets, space exploration, and video games. Avid traveler who values cultural experiences and embraces life's opportunities to learn and grow.
+            When I’m not coding, you’ll likely find me breaking a sweat at the gym, strumming my guitar in search of the next big hit (or just trying to stay in tune), or diving into the latest in rocket science and space exploration—because who doesn’t dream of being an astronaut? I’m also an avid gamer, a curious traveler who loves immersing in new cultures, and someone who’s always ready to embrace life’s adventures and lessons, one passport stamp at a time.
           </p>
           <h2 className="text-xl font-semibold mb-2 mt-4">Motivation</h2>
           <p>
@@ -50,6 +70,31 @@ export default function About() {
           </p>
         </CardContent>
       </Card>
+
+      <div className="mt-8">
+        <h2 className="text-2xl font-bold mb-4">Resumes</h2>
+        {isMobile ? (
+          <div className="space-y-4">
+            <a href={shortResume} target="_blank" rel="noopener noreferrer" className="block text-center bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+              View Resume
+            </a>
+            <a href={longResume} target="_blank" rel="noopener noreferrer" className="block text-center bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+              View Long Resume
+            </a>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <h3 className="text-xl font-semibold mb-2">Resume</h3>
+              <iframe src={shortResume} className="w-full h-96 border-4 border-blue-500 rounded-lg shadow-lg" />
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold mb-2">Detailed Resume</h3>
+              <iframe src={longResume} className="w-full h-96 border-4 border-blue-500 rounded-lg shadow-lg" />
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
