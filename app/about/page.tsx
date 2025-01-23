@@ -7,7 +7,7 @@ import Image from 'next/image'
 const profilePhoto = "/media/yo.jpg"
 const triathlonPhoto = "/media/triathlon.jpg"
 const shortResume = "/Legal.pdf"
-const longResume = "/long.pdf"
+const longResume = "/Long.pdf"
 
 export default function About() {
   const [isMobile, setIsMobile] = useState(false)
