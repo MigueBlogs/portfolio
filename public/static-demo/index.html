@@ -1,0 +1,1194 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Block Blast - Cubo 3x3 (tipo Rubik)</title>
+  <style>
+    html,body{height:100%;margin:0;background:#111;color:#eee;font-family:Inter,Segoe UI,Helvetica,Arial}
+    #ui{position:absolute;left:10px;top:10px;width:220px}
+    #canvas{display:block;background:linear-gradient(180deg,#0b1220, #081017);width:100%;height:100%}
+    .panel{background:rgba(255,255,255,0.03);padding:10px;border-radius:8px;margin-bottom:10px}
+    h1{font-size:16px;margin:0 0 6px 0}
+    p{margin:6px 0;font-size:13px;color:#bcd}
+    #score{position:absolute;right:18px;top:10px;padding:8px 12px;background:rgba(0,0,0,0.4);border-radius:8px;font-weight:700;font-size:44px}
+    .palette{display:flex;gap:8px;align-items:center}
+    .piecePreview{width:64px;height:64px;background:rgba(255,255,255,0.02);border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:grab}
+    .hint{font-size:12px;color:#9bb}
+    footer{position:absolute;left:10px;bottom:10px;color:#869}
+    
+  /* Área de selección de pieza actual (sin laterales) */
+    #next-pieces-bar {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: flex-end; /* alinear todos los cuadros en la parte inferior */
+      gap: 8px;
+      z-index: 2;
+    }
+    
+    .piece-box {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end; /* evita estiramiento; ancla el canvas abajo */
+      background: rgba(255,255,255,0.06);
+      border-radius: 12px;
+    }
+    
+    #current-piece-container {
+      width: 200px;
+      height: 200px;
+      cursor: grab;
+      padding: 10px;
+    }
+    
+    /* Mini vistas internas (1/9 del área cada una) */
+    #mini-next, #current-piece-2d {
+      position: absolute;
+      width: 33.333%;
+      height: 33.333%;
+      background: rgba(255,255,255,0.06);
+      border-radius: 8px;
+      border: 2px solid rgba(0,0,0,0.35);
+      box-sizing: border-box;
+    }
+    #mini-next { top: 8px; left: 8px; }
+    #current-piece-2d { top: 8px; right: 8px; }
+
+    /* Panel de mayor puntaje (top-left) */
+    #highscore-panel {
+      position: absolute; left: 18px; top: 16px; width: 220px; z-index: 3;
+      background: rgba(255,255,255,0.06); border-radius: 10px; padding: 10px 12px;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+    }
+    #highscore-panel .hs-title { font-size: 12px; color: #9bb; font-weight: 600; letter-spacing: .3px; }
+    #highscore-panel .hs-value { font-size: 20px; font-weight: 900; color: #ffd93d; text-shadow: 0 0 10px rgba(255,217,61,0.45); }
+    #highscore-panel .hs-row { display:flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    #highscore-panel .hs-bar { height: 8px; width: 100%; background: rgba(255,255,255,0.15); border-radius: 999px; overflow: hidden; }
+    #highscore-panel .hs-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg,#6bcf77,#ffd93d); box-shadow: 0 0 10px rgba(255,217,61,0.35); }
+
+    /* Parpadeo/palpitar del score cuando supera el mayor puntaje */
+    @keyframes recordPulse {
+      0% { transform: scale(1); color: #ffffff; text-shadow: 0 0 0 rgba(255,215,0,0); }
+      50% { transform: scale(1.08); color: #ffd93d; text-shadow: 0 0 18px rgba(255,215,0,0.75); }
+      100% { transform: scale(1); color: #ffffff; text-shadow: 0 0 0 rgba(255,215,0,0); }
+    }
+    #score.record-blink { animation: recordPulse 700ms ease-in-out infinite; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  
+  <div id="score">Score: 0</div>
+  <!-- Panel de mayor puntaje -->
+  <div id="highscore-panel" style="display:none;">
+    <div class="hs-row"><div class="hs-title">Mayor puntaje</div><div class="hs-value" id="hs-value">0</div></div>
+    <div class="hs-bar"><div class="hs-bar-fill" id="hs-bar-fill"></div></div>
+  </div>
+  <!-- Área única de selección y vista de pieza actual -->
+  <div id="next-pieces-bar">
+    <div class="piece-box" id="current-piece-container">
+      <!-- Mini siguiente (esquina sup. izquierda) -->
+      <canvas id="mini-next" width="64" height="64"></canvas>
+      <!-- Mini 2D (esquina sup. derecha) -->
+      <canvas id="current-piece-2d" width="64" height="64"></canvas>
+      <!-- Vista 3D principal de la pieza actual -->
+      <canvas id="current-piece" width="160" height="160"></canvas>
+    </div>
+  </div>
+  <footer></footer>
+
+<script>
+// --- Configuración y utilidades ---
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let W=canvas.width=innerWidth, H=canvas.height=innerHeight;
+window.addEventListener('resize',()=>{W=canvas.width=innerWidth;H=canvas.height=innerHeight;draw();});
+
+// 3x3x3 grid coordinates x,y,z in {0,1,2}
+const GRID = []; // will hold null or {color}
+for(let x=0;x<3;x++){GRID[x]=[];for(let y=0;y<3;y++){GRID[x][y]=[];for(let z=0;z<3;z++){GRID[x][y][z]=null}}}
+
+let score = 0; const scoreEl = document.getElementById('score');
+// High score: inicia en 0 al refrescar la página; se mantiene al reiniciar
+let highScore = 0;
+let hasShownRecordThisRun = false; // evitar múltiples "Nuevo Récord" tras superar
+let baselineSet = false; // no mostrar "Nuevo Récord" hasta que exista baseline (después del primer game over)
+// Referencias UI de mayor puntaje
+const hsPanel = document.getElementById('highscore-panel');
+const hsValueEl = document.getElementById('hs-value');
+const hsBarFill = document.getElementById('hs-bar-fill');
+// Combo y animaciones
+let consecutivePlanes = 0; // cuenta de planos en eventos consecutivos
+let animationQueue = []; let isAnimating = false;
+// Variables de animación y resaltado
+let eliminatingCubes = []; // {pos:[wx,wy,wz], color, startTime, fadeMs}
+let highlightPlanes = []; // lista de celdas [{x,y,z},...]
+let lastPlanesRemoved = 0;
+const ELIMINATION_MS = 550;
+
+// Estado de fin de juego
+let gameOver = false;
+let gameOverOverlay = null;
+let gameOverBlinking = false;
+
+// cube rendering params
+let scale = Math.min(W,H)/2; // base scale of unit
+const cubeSize = 1; // unit cube size
+let rotX = -0.4, rotY = 0.6; // camera rotation angles
+
+// simple 3D math
+function rotMatrix(ax,ay){
+  const cx=Math.cos(ax), sx=Math.sin(ax), cy=Math.cos(ay), sy=Math.sin(ay);
+  return {
+    apply: (v)=>{
+      // rotate X then Y
+      let [x,y,z]=v;
+      // rotX around X
+      let y1 = y*cx - z*sx;
+      let z1 = y*sx + z*cx;
+      // rotY around Y
+      let x2 = x*cy + z1*sy;
+      let z2 = -x*sy + z1*cy;
+      return [x2,y1,z2];
+    }
+  }
+}
+
+function project(p){
+  const eyeZ = 6; // distance
+  const [x,y,z] = p;
+  const px = (x/(eyeZ - z))*scale + W/2;
+  const py = (y/(eyeZ - z))*scale + H/2;
+  return [px,py];
+}
+
+function drawUnitCube(pos, color, outline=true, alpha=1, visibleFaces=null, isGhost=false){
+  // pos is [x,y,z] in world coords
+  const m = rotMatrix(rotX, rotY);
+  // compute 8 vertices
+  const s = 0.45; // half-size of small cube
+  const verts = [
+    [-s,-s,-s],[s,-s,-s],[s,s,-s],[-s,s,-s],
+    [-s,-s,s],[s,-s,s],[s,s,s],[-s,s,s]
+  ].map(v=>{
+    const wp = [v[0]+pos[0], v[1]+pos[1], v[2]+pos[2]];
+    return m.apply(wp);
+  });
+  // faces with painter's algorithm order by average z
+  const faces = [
+    {key:'back',  idx:[0,1,2,3],shade:0.7},  // -Z
+    {key:'front', idx:[4,5,6,7],shade:1.0},  // +Z
+    {key:'bottom',idx:[0,1,5,4],shade:0.82}, // -Y
+    {key:'top',   idx:[2,3,7,6],shade:0.92}, // +Y
+    {key:'right', idx:[1,2,6,5],shade:0.88}, // +X
+    {key:'left',  idx:[0,3,7,4],shade:0.78}  // -X
+  ];
+  // sort faces by average z desc
+  faces.sort((a,b)=>{
+    const za = a.idx.reduce((s,i)=>s+verts[i][2],0)/4;
+    const zb = b.idx.reduce((s,i)=>s+verts[i][2],0)/4;
+    return zb-za;
+  });
+  ctx.save(); ctx.globalAlpha=alpha;
+  for(let fi=0; fi<faces.length; fi++){
+    const f = faces[fi];
+    if(visibleFaces && visibleFaces[f.key]===false) continue; // ocultar caras interiores por nombre
+    ctx.beginPath();
+    const vs = f.idx.map(i=>project(verts[i]));
+    ctx.moveTo(vs[0][0],vs[0][1]);
+    for(let i=1;i<vs.length;i++) ctx.lineTo(vs[i][0],vs[i][1]);
+    ctx.closePath();
+    // fill with color adjusted by shade
+    const col = shadeColor(color, f.shade);
+    ctx.fillStyle = col; ctx.fill();
+    if(outline){
+      ctx.strokeStyle = isGhost ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.95)';
+      ctx.lineWidth = isGhost ? 1.2 : 2.4;
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+function shadeColor(hex, factor){
+  // hex like '#rrggbb'
+  const c = hex.replace('#','');
+  const r = parseInt(c.substr(0,2),16); const g=parseInt(c.substr(2,2),16); const b=parseInt(c.substr(4,2),16);
+  const rr = Math.max(0, Math.min(255, Math.floor(r*factor)));
+  const gg = Math.max(0, Math.min(255, Math.floor(g*factor)));
+  const bb = Math.max(0, Math.min(255, Math.floor(b*factor)));
+  return `rgb(${rr},${gg},${bb})`;
+}
+
+// --- Game state: pieces and interactions ---
+const currentPieceCanvas = document.getElementById('current-piece');
+const currentPieceCtx = currentPieceCanvas.getContext('2d');
+const pieceContainer = document.getElementById('current-piece-container');
+// Vistas internas: mini 2D y mini siguiente
+const currentPiece2DCanvas = document.getElementById('current-piece-2d');
+const currentPiece2DCtx = currentPiece2DCanvas.getContext('2d');
+const miniNextCanvas = document.getElementById('mini-next');
+const miniNextCtx = miniNextCanvas.getContext('2d');
+
+function randColor(){ const cols=['#ff6b6b','#ffd93d','#6bcB77','#4dabf7','#c77df7','#f28e1c','#00ccb1']; return cols[Math.floor(Math.random()*cols.length)]; }
+
+function randomPiece(){
+  // create 1-3 block polycube con rotación aleatoria en 3D (24 orientaciones del cubo)
+  const len = 1 + Math.floor(Math.random()*3);
+  let base = [];
+  if(len===1) base=[[0,0,0]];
+  else if(len===2){
+    const r=Math.random();
+    base = r<0.5 ? [[0,0,0],[1,0,0]] : [[0,0,0],[0,1,0]];
+  } else {
+    const r = Math.random();
+    if(r<0.5) base=[[0,0,0],[1,0,0],[2,0,0]]; // línea de 3
+    else base=[[0,0,0],[1,0,0],[1,1,0]]; // L
+  }
+
+  // Generar rotaciones si no existen (24 orientaciones con determinante +1)
+  if(!window.__ROT_MATS__){
+    const axes = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+    const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+    const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+    const rots=[];
+    for(const ex of axes){
+      for(const ay of axes){
+        if(dot(ex,ay)!==0) continue; // perpendicular
+        const ez = cross(ex,ay);
+        // ez debe ser unitario; si alguno es 0, no es base válida
+        if(ez[0]===0 && ez[1]===0 && ez[2]===0) continue;
+        // matriz con columnas ex, ay, ez
+        rots.push([ex,ay,ez]);
+      }
+    }
+    // Deberían ser 24
+    window.__ROT_MATS__ = rots;
+  }
+  const ROT_MATS = window.__ROT_MATS__;
+  const R = ROT_MATS[Math.floor(Math.random()*ROT_MATS.length)];
+  const applyR = ([x,y,z])=>[
+    x*R[0][0] + y*R[1][0] + z*R[2][0],
+    x*R[0][1] + y*R[1][1] + z*R[2][1],
+    x*R[0][2] + y*R[1][2] + z*R[2][2]
+  ];
+  let cells = base.map(applyR);
+  // Normalizar para que el mínimo en cada eje sea 0 (mantener en cuadrante positivo)
+  let minX=Infinity,minY=Infinity,minZ=Infinity;
+  for(const [x,y,z] of cells){
+    if(x<minX) minX=x; if(y<minY) minY=y; if(z<minZ) minZ=z;
+  }
+  cells = cells.map(([x,y,z])=>[x-minX,y-minY,z-minZ]);
+
+  const single = randColor();
+  const colors = cells.map(()=>single);
+  return {cells,colors};
+}
+
+// --- Generación "inteligente" de próximas piezas ---
+function areAdjacent(a,b){ return (Math.abs(a.x-b.x)+Math.abs(a.y-b.y)+Math.abs(a.z-b.z))===1; }
+function normalizeCells(cells){
+  let minX=Infinity,minY=Infinity,minZ=Infinity;
+  for(const [x,y,z] of cells){ if(x<minX)minX=x; if(y<minY)minY=y; if(z<minZ)minZ=z; }
+  return cells.map(([x,y,z])=>[x-minX,y-minY,z-minZ]);
+}
+function pieceFromWorldCells(cells){
+  const color = randColor();
+  const local = normalizeCells(cells.map(c=>[c.x,c.y,c.z]));
+  return {cells: local, colors: new Array(local.length).fill(color)};
+}
+function collectPlanes(){
+  const planes=[];
+  // x-planes
+  for(let x=0;x<3;x++){
+    const empties=[]; let filled=0;
+    for(let y=0;y<3;y++) for(let z=0;z<3;z++){
+      if(GRID[x][y][z]===null) empties.push({x,y,z}); else filled++;
+    }
+    planes.push({type:'x',i:x,empties,filled,emptyCount:empties.length});
+  }
+  // y-planes
+  for(let y=0;y<3;y++){
+    const empties=[]; let filled=0;
+    for(let x=0;x<3;x++) for(let z=0;z<3;z++){
+      if(GRID[x][y][z]===null) empties.push({x,y,z}); else filled++;
+    }
+    planes.push({type:'y',i:y,empties,filled,emptyCount:empties.length});
+  }
+  // z-planes
+  for(let z=0;z<3;z++){
+    const empties=[]; let filled=0;
+    for(let x=0;x<3;x++) for(let y=0;y<3;y++){
+      if(GRID[x][y][z]===null) empties.push({x,y,z}); else filled++;
+    }
+    planes.push({type:'z',i:z,empties,filled,emptyCount:empties.length});
+  }
+  // Prefer planes with fewer empties first (closer to completion)
+  planes.sort((a,b)=>a.emptyCount-b.emptyCount);
+  return planes;
+}
+function rangesOnAxes(pts){
+  const xs=pts.map(p=>p.x), ys=pts.map(p=>p.y), zs=pts.map(p=>p.z);
+  const rx=Math.max(...xs)-Math.min(...xs);
+  const ry=Math.max(...ys)-Math.min(...ys);
+  const rz=Math.max(...zs)-Math.min(...zs);
+  return {rx,ry,rz};
+}
+function findExactCompletionPiece(){
+  const planes = collectPlanes();
+  for(const p of planes){
+    if(p.emptyCount===0 || p.emptyCount>3) continue;
+    const e = p.empties;
+    if(e.length===1){ return pieceFromWorldCells(e); }
+    if(e.length===2){ if(areAdjacent(e[0],e[1])) return pieceFromWorldCells(e); else continue; }
+    if(e.length===3){
+      const {rx,ry,rz} = rangesOnAxes(e);
+      // Determine the two varying axes within the plane
+      const vary = [rx>0, ry>0, rz>0];
+      // Line: one varying axis has range 2 and the other varying axis has range 0
+      if((rx===2 && ry===0 && rz===0) || (ry===2 && rx===0 && rz===0) || (rz===2 && rx===0 && ry===0)){
+        // ensure consecutiveness: we can assume in 3x3 if range=2 and 3 points they are consecutive
+        return pieceFromWorldCells(e);
+      }
+      // L-shape: the two varying axes (within plane) both have range 1
+      if((rx===1 && ry===1 && rz===0) || (rx===1 && rz===1 && ry===0) || (ry===1 && rz===1 && rx===0)){
+        return pieceFromWorldCells(e);
+      }
+    }
+  }
+  return null;
+}
+function generateSmartPiece(){
+  // Small chance for variety
+  if(Math.random()<0.15) return randomPiece();
+
+  // 1) Try to complete a plane exactly with 1-3 cells patterns
+  const exact = findExactCompletionPiece();
+  if(exact) return exact;
+
+  // 2) Otherwise, try to advance the most-progressed plane by placing 3 or 2 contiguous empties
+  const planes = collectPlanes().filter(p=>p.emptyCount>0);
+  if(planes.length){
+    const best = planes[0];
+    const emptySet = new Set(best.empties.map(c=>c.x+","+c.y+","+c.z));
+    const has = (x,y,z)=>emptySet.has(x+","+y+","+z);
+    const dirsInPlane = (best.type==='x') ? [[0,1,0],[0,0,1]] : (best.type==='y' ? [[1,0,0],[0,0,1]] : [[1,0,0],[0,1,0]]);
+    // Try line of 3 within empties
+    for(const a of best.empties){
+      for(const d of dirsInPlane){
+        const b={x:a.x+d[0],y:a.y+d[1],z:a.z+d[2]};
+        const c={x:a.x+2*d[0],y:a.y+2*d[1],z:a.z+2*d[2]};
+        if(has(b.x,b.y,b.z) && has(c.x,c.y,c.z)){
+          return pieceFromWorldCells([a,b,c]);
+        }
+      }
+    }
+    // Try L of 3 within empties
+    for(const a of best.empties){
+      const d1 = dirsInPlane[0], d2 = dirsInPlane[1];
+      const combos = [
+        [a, {x:a.x+d1[0],y:a.y+d1[1],z:a.z+d1[2]}, {x:a.x+d1[0]+d2[0],y:a.y+d1[1]+d2[1],z:a.z+d1[2]+d2[2]}],
+        [a, {x:a.x+d2[0],y:a.y+d2[1],z:a.z+d2[2]}, {x:a.x+d1[0]+d2[0],y:a.y+d1[1]+d2[1],z:a.z+d1[2]+d2[2]}]
+      ];
+      for(const tri of combos){
+        if(tri.every(p=>has(p.x,p.y,p.z))) return pieceFromWorldCells(tri);
+      }
+    }
+    // Try adjacent pair within empties
+    for(const a of best.empties){
+      for(const d of dirsInPlane){
+        const b={x:a.x+d[0],y:a.y+d[1],z:a.z+d[2]};
+        if(has(b.x,b.y,b.z)) return pieceFromWorldCells([a,b]);
+      }
+    }
+    // Fallback: single useful empty near center or near filled neighbors to encourage completion
+    let pick = best.empties[0];
+    let bestScore=-1;
+    for(const e of best.empties){
+      // score empties by adjacency to existing filled cells (encourages closing plane)
+      let adj=0;
+      const nbs=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+      for(const n of nbs){
+        const nx=e.x+n[0], ny=e.y+n[1], nz=e.z+n[2];
+        if(nx>=0&&nx<3&&ny>=0&&ny<3&&nz>=0&&nz<3 && GRID[nx][ny][nz]!==null) adj++;
+      }
+      const centerBias = 1 - (Math.abs(e.x-1)+Math.abs(e.y-1)+Math.abs(e.z-1))/6; // prefer central-ish
+      const s = adj + centerBias;
+      if(s>bestScore){ bestScore=s; pick=e; }
+    }
+    return pieceFromWorldCells([pick]);
+  }
+
+  // 3) If board is full (shouldn't reach here without game over), return random
+  return randomPiece();
+}
+
+let currentPiece = generateSmartPiece();
+let nextPiece = generateSmartPiece();
+let draggingPiece = null; // {cells,colors}
+let ghostPosition = null; // {x,y,z}
+let ghostValid = false;
+// Ya no hay selección lateral ni labels
+
+// Helper para dibujar una pieza 3D con la misma orientación del cubo principal
+function drawPiecePreview3D(canvas, ctxP, piece, scale = 1) {
+  ctxP.clearRect(0, 0, canvas.width, canvas.height);
+  if(!piece) return;
+
+  const cells = piece.cells.map(([x,y,z=0])=>({x,y,z}));
+  let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity;
+  cells.forEach(({x,y,z})=>{minX=Math.min(minX,x);minY=Math.min(minY,y);minZ=Math.min(minZ,z);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);maxZ=Math.max(maxZ,z);});
+  const cx=(minX+maxX)/2, cy=(minY+maxY)/2, cz=(minZ+maxZ)/2;
+
+  const m = rotMatrix(rotX, rotY);
+  const scaleP = Math.min(canvas.width, canvas.height) * scale;
+  const eyeZ = 6;
+  function projectP(p){
+    const [x,y,z] = p;
+    const px = (x/(eyeZ - z))*scaleP + canvas.width/2;
+    const py = (y/(eyeZ - z))*scaleP + canvas.height/2;
+    return [px,py];
+  }
+
+  const set = new Set(cells.map(({x,y,z})=>`${x},${y},${z}`));
+  const has=(x,y,z)=>set.has(`${x},${y},${z}`);
+  function maskLocal(x,y,z){
+    return {
+      back:   !has(x,y,z-1),
+      front:  !has(x,y,z+1),
+      bottom: !has(x,y-1,z),
+      top:    !has(x,y+1,z),
+      right:  !has(x+1,y,z),
+      left:   !has(x-1,y,z)
+    };
+  }
+
+  const s = 0.45;
+  const color = piece.colors[0];
+  const facesDef = [
+    {key:'back',  idx:[0,1,2,3], shade:0.7},
+    {key:'front', idx:[4,5,6,7], shade:1.0},
+    {key:'bottom',idx:[0,1,5,4], shade:0.82},
+    {key:'top',   idx:[2,3,7,6], shade:0.92},
+    {key:'right', idx:[1,2,6,5], shade:0.88},
+    {key:'left',  idx:[0,3,7,4], shade:0.78}
+  ];
+
+  const facesAll=[];
+  cells.forEach(({x,y,z})=>{
+    const pos=[(x-cx),(y-cy),(z-cz)];
+    const localVerts=[
+      [-s,-s,-s],[s,-s,-s],[s,s,-s],[-s,s,-s],
+      [-s,-s,s],[s,-s,s],[s,s,s],[-s,s,s]
+    ].map(v=>{
+      const wp=[v[0]+pos[0], v[1]+pos[1], v[2]+pos[2]]; 
+      return m.apply(wp);
+    });
+    const mask = maskLocal(x,y,z);
+    for(const fd of facesDef){
+      if(mask[fd.key]===false) continue;
+      const zAvg = fd.idx.reduce((acc,i)=>acc+localVerts[i][2],0)/4;
+      const vs = fd.idx.map(i=>projectP(localVerts[i]));
+      facesAll.push({depth:zAvg, vs, fill:shadeColor(color, fd.shade)});
+    }
+  });
+  facesAll.sort((a,b)=>a.depth-b.depth);
+
+  ctxP.save();
+  for(const f of facesAll){
+    ctxP.beginPath();
+    ctxP.moveTo(f.vs[0][0], f.vs[0][1]);
+    for(let i=1;i<f.vs.length;i++) ctxP.lineTo(f.vs[i][0], f.vs[i][1]);
+    ctxP.closePath();
+    ctxP.fillStyle=f.fill; ctxP.fill();
+    ctxP.strokeStyle='rgba(0,0,0,0.95)'; ctxP.lineWidth=2; ctxP.stroke();
+  }
+  ctxP.restore();
+}
+
+function drawCurrentPiece() {
+  drawPiecePreview3D(currentPieceCanvas, currentPieceCtx, currentPiece, 1.5);
+}
+
+// Dibujar las piezas siguientes
+function drawMiniNext(){
+  drawPiecePreview3D(miniNextCanvas, miniNextCtx, nextPiece, 1.1);
+}
+
+// Nueva vista 2D fija (centrada y con borde negro)
+function drawCurrentPiece2D(){
+  const c = currentPiece2DCanvas; const ctx2 = currentPiece2DCtx; if(!c||!ctx2||!currentPiece) return;
+  ctx2.clearRect(0,0,c.width,c.height);
+  const cells = currentPiece.cells;
+  // bounds para centrar
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  cells.forEach(([x,y])=>{minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);});
+  const w=maxX-minX+1, h=maxY-minY+1;
+  const cellSize = Math.floor(Math.min(c.width/(w+0.5), c.height/(h+0.5)));
+  const offX = Math.floor((c.width - cellSize*w)/2);
+  const offY = Math.floor((c.height - cellSize*h)/2);
+  const color = currentPiece.colors[0];
+  cells.forEach(([x,y])=>{
+    const px = offX + (x-minX)*cellSize + 1;
+    const py = offY + (y-minY)*cellSize + 1;
+    ctx2.fillStyle = color;
+    ctx2.fillRect(px, py, cellSize-2, cellSize-2);
+    ctx2.strokeStyle='rgba(0,0,0,0.95)';
+    ctx2.lineWidth=2; ctx2.strokeRect(px, py, cellSize-2, cellSize-2);
+  });
+}
+
+// Mouse interaction
+let mouse = {x:0,y:0,down:false,startX:0,startY:0,draggingPiece:false,dragStart:false};
+
+// Evento para comenzar a arrastrar la pieza desde el contenedor
+pieceContainer.addEventListener('mousedown', e => {
+  if(gameOver) return; // bloquear si terminó el juego
+  e.stopPropagation();
+  mouse.down = true;
+  mouse.draggingPiece = true;
+  startDragging(currentPiece);
+});
+
+canvas.addEventListener('mousemove',e=>{
+  if(gameOver) return;
+  const rect = canvas.getBoundingClientRect(); 
+  mouse.x=e.clientX-rect.left; 
+  mouse.y=e.clientY-rect.top;
+  
+  if(mouse.down){
+    if(mouse.draggingPiece && draggingPiece){
+      updateGhostFromMouse(mouse.x, mouse.y);
+    } else if(!mouse.draggingPiece){
+      // rotar
+      const dx = (mouse.x - mouse.startX)/200; 
+      const dy = (mouse.y - mouse.startY)/200;
+      rotY += dx; 
+      rotX += dy;
+      mouse.startX = mouse.x; 
+      mouse.startY = mouse.y;
+    }
+  }
+});
+
+canvas.addEventListener('mousedown',e=>{
+  if(gameOver) return;
+  const rect = canvas.getBoundingClientRect(); 
+  mouse.x=e.clientX-rect.left; 
+  mouse.y=e.clientY-rect.top; 
+  mouse.down=true; 
+  mouse.startX=mouse.x; 
+  mouse.startY=mouse.y;
+  if(!mouse.draggingPiece) {
+    mouse.dragStart = true;
+  }
+});
+
+canvas.addEventListener('mouseup',e=>{
+  if(gameOver) return;
+  mouse.down=false; 
+  mouse.dragStart=false;
+  
+  if(mouse.draggingPiece && draggingPiece){
+    attemptPlace();
+  }
+  mouse.draggingPiece=false;
+});
+
+function startDragging(piece){
+  draggingPiece = JSON.parse(JSON.stringify(piece)); // deep copy
+  ghostPosition = null; // inicia sin posición hasta mover
+  highlightPlanes = [];
+}
+
+function canPlaceAt(origin){
+  // devuelve índices absolutos resultantes o null si no cabe
+  const indices = draggingPiece.cells.map(c=>({x:origin.x+c[0],y:origin.y+c[1],z:origin.z+(c[2]||0)}));
+  const inBounds = indices.every(i=>i.x>=0&&i.x<3&&i.y>=0&&i.y<3&&i.z>=0&&i.z<3);
+  if(!inBounds) return null;
+  const empty = indices.every(i=>GRID[i.x][i.y][i.z]===null);
+  if(!empty) return null;
+  return indices;
+}
+
+function computePlanesCompletedWith(indices){
+  // retorna lista de arrays de celdas [{x,y,z},...9] por cada cara completada
+  const occ = Array.from({length:3},(_,x)=>Array.from({length:3},(_,y)=>Array.from({length:3},(_,z)=>GRID[x][y][z]!==null)));
+  indices.forEach(i=>{occ[i.x][i.y][i.z]=true});
+  const planes=[];
+  // X-planes
+  for(let x=0;x<3;x++){
+    let full=true; for(let y=0;y<3;y++) for(let z=0;z<3;z++) if(!occ[x][y][z]) full=false;
+    if(full){ const cells=[]; for(let y=0;y<3;y++) for(let z=0;z<3;z++) cells.push({x,y,z}); planes.push(cells); }
+  }
+  // Y-planes
+  for(let y=0;y<3;y++){
+    let full=true; for(let x=0;x<3;x++) for(let z=0;z<3;z++) if(!occ[x][y][z]) full=false;
+    if(full){ const cells=[]; for(let x=0;x<3;x++) for(let z=0;z<3;z++) cells.push({x,y,z}); planes.push(cells); }
+  }
+  // Z-planes
+  for(let z=0;z<3;z++){
+    let full=true; for(let x=0;x<3;x++) for(let y=0;y<3;y++) if(!occ[x][y][z]) full=false;
+    if(full){ const cells=[]; for(let x=0;x<3;x++) for(let y=0;y<3;y++) cells.push({x,y,z}); planes.push(cells); }
+  }
+  return planes;
+}
+
+function updateGhostFromMouse(mx,my){
+  if(!draggingPiece) return;
+  const m = rotMatrix(rotX, rotY);
+  let best=null; let bestDist=1e9;
+  // evaluar solo posiciones donde TODA la pieza cabe
+  for(let gx=0;gx<3;gx++) for(let gy=0;gy<3;gy++) for(let gz=0;gz<3;gz++){
+    const indices = canPlaceAt({x:gx,y:gy,z:gz});
+    if(!indices) continue;
+    const pt = m.apply([gx-1,gy-1,gz-1]);
+    const [sx,sy] = project(pt);
+    const d = Math.hypot(sx-mx, sy-my);
+    if(d<bestDist){ bestDist=d; best={x:gx,y:gy,z:gz, indices}; }
+  }
+  if(best){
+    ghostPosition = {x:best.x,y:best.y,z:best.z};
+    ghostValid = true;
+    highlightPlanes = computePlanesCompletedWith(best.indices);
+  } else {
+    ghostPosition = null; ghostValid=false; highlightPlanes=[];
+  }
+}
+
+function attemptPlace(){
+  if(!draggingPiece || !ghostPosition || !ghostValid) { draggingPiece=null; highlightPlanes=[]; return; }
+  const indices = draggingPiece.cells.map(c=>({x:ghostPosition.x+c[0],y:ghostPosition.y+c[1],z:ghostPosition.z+(c[2]||0)}));
+  const inBounds = indices.every(i=>i.x>=0&&i.x<3&&i.y>=0&&i.y<3&&i.z>=0&&i.z<3);
+  const empty = inBounds && indices.every(i=>GRID[i.x][i.y][i.z]===null);
+  if(inBounds && empty){
+    // place
+    indices.forEach((idx,i)=>{ GRID[idx.x][idx.y][idx.z] = {color: draggingPiece.colors[0]}; });
+    // score por colocar
+    score += 10 * draggingPiece.cells.length;
+    // eliminar caras completas y aplicar bonus
+    const removedCubes = removeFullLines();
+    if(removedCubes>0){
+      score += removedCubes*50; // por cubo
+      score += lastPlanesRemoved*100; // +100 por plano
+      // combo: si en esta jugada hay 2+ planos, aplicar multiplicador
+      if(lastPlanesRemoved === 2){
+        score *= 2; // X2 directo por jugada con múltiples planos
+        queueAnimation({type:'combo', mult:2});
+      }
+      if(lastPlanesRemoved >= 3){
+        score *= 3; // X3 directo por jugada con múltiples planos
+        queueAnimation({type:'combo', mult:3});
+      }
+      // consecutivos: si también la jugada anterior tuvo planos, subir nivel
+      if(consecutivePlanes>0 && lastPlanesRemoved>0){
+        const level = Math.min(3, 1 + consecutivePlanes); // limitar a X3 visual
+        if(level>=3){ queueAnimation({type:'combo', mult:3}); }
+      }
+      consecutivePlanes += lastPlanesRemoved;
+      showLineCompleteEffect();
+      if(lastPlanesRemoved>0){
+        const msgs = ["¡INCREÍBLE!","¡FANTÁSTICO!","¡ESPECTACULAR!","¡SUPER!", "¡MAJESTUOSO!", "¡LEGENDARIO!"]; showToast(msgs[Math.floor(Math.random()*msgs.length)]);
+      }
+    } else {
+      consecutivePlanes = 0;
+    }
+
+    // nuevo récord: mostrar sólo cuando se supera por primera vez y score>0
+  // Actualizar panel de progreso
+  updateHighScorePanelProgress();
+
+  if(baselineSet && score>highScore && score>0 && !hasShownRecordThisRun){
+      highScore = score; hasShownRecordThisRun = true;
+      queueAnimation({type:'newRecord', value:highScore});
+    }
+    scoreEl.textContent = `Score: ${score}`;
+  toggleScoreBlink();
+  // nueva pieza - promover mini siguiente
+  animatePromoteNext(nextPiece);
+  currentPiece = nextPiece;
+  nextPiece = generateSmartPiece();
+  drawCurrentPiece();
+  drawMiniNext();
+    checkGameOver();
+  }
+  draggingPiece = null; ghostPosition=null; ghostValid=false; highlightPlanes=[];
+}
+
+// Cancelar selección/arrastre actual (ESC)
+function cancelDragSelection(){
+  draggingPiece = null;
+  ghostPosition = null;
+  ghostValid = false;
+  highlightPlanes = [];
+  mouse.draggingPiece = false;
+  mouse.down = false;
+  mouse.dragStart = false;
+}
+
+function removeFullLines(){
+  // eliminar CARAS (planos 3x3) completas
+  let toRemove = [];
+  lastPlanesRemoved = 0;
+  // X planes
+  for(let x=0;x<3;x++){
+    let full=true; for(let y=0;y<3;y++) for(let z=0;z<3;z++) if(GRID[x][y][z]===null) full=false;
+    if(full){ lastPlanesRemoved++; for(let y=0;y<3;y++) for(let z=0;z<3;z++) toRemove.push([x,y,z]); }
+  }
+  // Y planes
+  for(let y=0;y<3;y++){
+    let full=true; for(let x=0;x<3;x++) for(let z=0;z<3;z++) if(GRID[x][y][z]===null) full=false;
+    if(full){ lastPlanesRemoved++; for(let x=0;x<3;x++) for(let z=0;z<3;z++) toRemove.push([x,y,z]); }
+  }
+  // Z planes
+  for(let z=0;z<3;z++){
+    let full=true; for(let x=0;x<3;x++) for(let y=0;y<3;y++) if(GRID[x][y][z]===null) full=false;
+    if(full){ lastPlanesRemoved++; for(let x=0;x<3;x++) for(let y=0;y<3;y++) toRemove.push([x,y,z]); }
+  }
+  // únicos
+  const key=p=>`${p[0]}_${p[1]}_${p[2]}`; const uniq={}; toRemove.forEach(p=>uniq[key(p)]=p);
+  const list = Object.values(uniq);
+  const now = performance.now();
+  let removed=0;
+  list.forEach(p=>{ const c=GRID[p[0]][p[1]][p[2]]; if(c){ eliminatingCubes.push({pos:[p[0]-1,p[1]-1,p[2]-1], color:c.color, startTime:now, fadeMs:ELIMINATION_MS}); GRID[p[0]][p[1]][p[2]]=null; removed++; } });
+  return removed;
+}
+
+// Animación de promoción de pieza siguiente a actual
+function animatePromoteNext(piece) {
+  try {
+  const sourceCanvas = miniNextCanvas;
+    const destCanvas = currentPieceCanvas;
+    
+    const sourceRect = sourceCanvas.getBoundingClientRect();
+    const destRect = destCanvas.getBoundingClientRect();
+    
+    // Crear canvas volador
+    const flyingCanvas = document.createElement('canvas');
+    flyingCanvas.width = sourceCanvas.width;
+    flyingCanvas.height = sourceCanvas.height;
+    const flyCtx = flyingCanvas.getContext('2d');
+    
+    // Dibujar la pieza en el canvas volador
+    drawPiecePreview3D(flyingCanvas, flyCtx, piece, 1.2);
+    
+    // Posicionar y estilizar
+    Object.assign(flyingCanvas.style, {
+      position: 'fixed',
+      left: sourceRect.left + 'px',
+      top: sourceRect.top + 'px',
+      width: sourceRect.width + 'px',
+      height: sourceRect.height + 'px',
+      transition: 'all 300ms cubic-bezier(0.25, 0.8, 0.25, 1)',
+      zIndex: '9999',
+      pointerEvents: 'none',
+      filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.3))'
+    });
+    
+    document.body.appendChild(flyingCanvas);
+    
+    // Animar hacia el destino
+    requestAnimationFrame(() => {
+      flyingCanvas.style.left = destRect.left + 'px';
+      flyingCanvas.style.top = destRect.top + 'px';
+      flyingCanvas.style.width = destRect.width + 'px';
+      flyingCanvas.style.height = destRect.height + 'px';
+    });
+    
+    // Limpiar después de la animación
+    setTimeout(() => {
+      if (flyingCanvas.parentNode) {
+        flyingCanvas.remove();
+      }
+    }, 350);
+    
+  } catch (error) {
+    // Si la animación falla, continuar sin ella
+    console.log('Animation failed:', error);
+  }
+}
+
+// ================= EFECTOS Y COLA DE ANIMACIONES =================
+function queueAnimation(evt){ animationQueue.push(evt); if(!isAnimating) processAnimQueue(); }
+function processAnimQueue(){
+  if(animationQueue.length===0){ isAnimating=false; return; }
+  isAnimating=true; const evt=animationQueue.shift();
+  if(evt.type==='combo') showComboEffect(evt.mult, processAnimQueue);
+  else if(evt.type==='newRecord') showNewRecordEffect(evt.value, processAnimQueue);
+  else processAnimQueue();
+}
+
+function showComboEffect(mult, done){
+  const text = mult>=3? '¡X3 MEGA COMBO!' : '¡X2 COMBO!';
+  const color = mult>=3? '#ff6b6b' : '#ffd93d';
+  const div=document.createElement('div'); div.textContent=text;
+  Object.assign(div.style,{
+    position:'fixed',left:'50%',top:'35%',transform:'translate(-50%,-50%) scale(0.85)',
+    color:color,fontSize:'72px',fontWeight:'900',letterSpacing:'2px',
+    textShadow:`0 0 22px ${color}, 0 0 50px ${color}80`,opacity:'0',zIndex:99999,
+    pointerEvents:'none',background:`linear-gradient(45deg, ${color}22, transparent)`,
+    padding:'12px 28px',borderRadius:'16px',border:`3px solid ${color}66`,
+    transition:'all 500ms cubic-bezier(0.68,-0.55,0.265,1.55)'
+  });
+  document.body.appendChild(div);
+  requestAnimationFrame(()=>{ div.style.opacity='1'; div.style.transform='translate(-50%,-50%) scale(1.1)'; });
+  setTimeout(()=>{ div.style.transform='translate(-50%,-50%) scale(1.2)'; },350);
+  setTimeout(()=>{ div.style.opacity='0'; div.style.transform='translate(-50%,-60%) scale(0.9)'; },1200);
+  setTimeout(()=>{ div.remove(); if(done) done(); },1800);
+}
+
+function showNewRecordEffect(value, done){
+  const box=document.createElement('div');
+  box.innerHTML = `<div style="font-size:54px">🏆</div><div style="font-size:84px;font-weight:900">¡NUEVO RÉCORD!</div><div style="font-size:34px">${value} puntos</div>`;
+  Object.assign(box.style,{
+    position:'fixed',left:'50%',top:'40%',transform:'translate(-50%,-50%) scale(0.6)',
+    color:'#ffd93d',textAlign:'center',textShadow:'0 0 24px #ffd93d,0 0 60px #ff6b6b',
+    background:'linear-gradient(45deg,#ffd93d22,#4dabf722)',padding:'32px 42px',borderRadius:'24px',
+    border:'3px solid #ffd93d',zIndex:99998,opacity:'0',pointerEvents:'none',
+    transition:'all 700ms cubic-bezier(0.68,-0.55,0.265,1.55)'
+  });
+  document.body.appendChild(box);
+  for(let i=0;i<20;i++) createSparkleParticle();
+  requestAnimationFrame(()=>{ box.style.opacity='1'; box.style.transform='translate(-50%,-50%) scale(1)'; });
+  setTimeout(()=>{ box.style.transform='translate(-50%,-50%) scale(1.08)'; },400);
+  setTimeout(()=>{ box.style.opacity='0'; box.style.transform='translate(-50%,-60%) scale(0.85)'; },2400);
+  setTimeout(()=>{ box.remove(); if(done) done(); },3100);
+}
+
+// --- Main render loop ---
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const m = rotMatrix(rotX, rotY);
+
+  // ocupación incluyendo ghost válido (para ocultar caras interiores tanto en GRID como en ghost)
+  const occ = Array.from({length:3},()=>Array.from({length:3},()=>Array.from({length:3},()=>false)));
+  for(let x=0;x<3;x++) for(let y=0;y<3;y++) for(let z=0;z<3;z++) if(GRID[x][y][z]) occ[x][y][z]=true;
+  const ghostCells = [];
+  if(ghostPosition && ghostValid && draggingPiece){
+    draggingPiece.cells.forEach(c=>{
+      const gx=ghostPosition.x+c[0], gy=ghostPosition.y+c[1], gz=ghostPosition.z+(c[2]||0);
+      if(gx>=0&&gx<3&&gy>=0&&gy<3&&gz>=0&&gz<3) { occ[gx][gy][gz]=true; ghostCells.push([gx,gy,gz]); }
+    });
+  }
+  // helper visible faces mask (devuelve objeto con nombres)
+  function maskFor(x,y,z){
+    const vis = {back:false,front:false,bottom:false,top:false,right:false,left:false};
+    vis.back   = (z-1<0) || !occ[x][y][z-1];   // -Z
+    vis.front  = (z+1>2) || !occ[x][y][z+1];   // +Z
+    vis.bottom = (y-1<0) || !occ[x][y-1][z];   // -Y
+    vis.top    = (y+1>2) || !occ[x][y+1][z];   // +Y
+    vis.right  = (x+1>2) || !occ[x+1][y][z];   // +X
+    vis.left   = (x-1<0) || !occ[x-1][y][z];   // -X
+    return vis;
+  }
+
+  // Construir lista de cubos a renderizar (reales + ghost)
+  const cubes = [];
+  for(let x=0;x<3;x++) for(let y=0;y<3;y++) for(let z=0;z<3;z++){
+    const cell = GRID[x][y][z];
+    if(cell){ 
+      cubes.push({pos:[x-1,y-1,z-1], grid:[x,y,z], color:cell.color, mask:maskFor(x,y,z), isGhost:false, alpha:1});
+    }
+  }
+  if(ghostCells.length){
+    const gColor = draggingPiece ? draggingPiece.colors[0] : '#ffffff';
+    ghostCells.forEach(([x,y,z])=>{
+      cubes.push({pos:[x-1,y-1,z-1], grid:[x,y,z], color:gColor, mask:maskFor(x,y,z), isGhost:true, alpha:0.58});
+    });
+  }
+
+  // Función para construir las caras ya transformadas y proyectadas de un cubo
+  const s = 0.45; // half-size of small cube
+  function buildFaces(cube){
+    const {pos,color,mask,isGhost,alpha} = cube;
+    const localVerts = [
+      [-s,-s,-s],[s,-s,-s],[s,s,-s],[-s,s,-s],
+      [-s,-s,s],[s,-s,s],[s,s,s],[-s,s,s]
+    ];
+    // transformar vértices (mundo->vista)
+    const verts = localVerts.map(v=>{
+      const wp = [v[0]+pos[0], v[1]+pos[1], v[2]+pos[2]];
+      return m.apply(wp);
+    });
+    // definición de caras con sombreado
+    const facesDef = [
+      {key:'back',  idx:[0,1,2,3], shade:0.7},
+      {key:'front', idx:[4,5,6,7], shade:1.0},
+      {key:'bottom',idx:[0,1,5,4], shade:0.82},
+      {key:'top',   idx:[2,3,7,6], shade:0.92},
+      {key:'right', idx:[1,2,6,5], shade:0.88},
+      {key:'left',  idx:[0,3,7,4], shade:0.78}
+    ];
+    const out=[];
+    for(const fd of facesDef){
+      if(mask && mask[fd.key]===false) continue; // ocultar caras internas
+      const zAvg = fd.idx.reduce((s,i)=>s+verts[i][2],0)/4;
+      const vs = fd.idx.map(i=>project(verts[i]));
+      out.push({
+        depth:zAvg,
+        vs,
+        fill: shadeColor(color, fd.shade),
+        stroke: isGhost ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.95)',
+        lw: isGhost ? 1.2 : 2.4,
+        alpha
+      });
+    }
+    return out;
+  }
+
+  // Recolectar todas las caras (de todos los cubos) y ordenarlas globalmente por profundidad
+  let facesAll = [];
+  cubes.forEach(c=>{ facesAll = facesAll.concat(buildFaces(c)); });
+  facesAll.sort((a,b)=>a.depth-b.depth); // back->front
+
+  // Bounding cubes guía (debajo)
+  drawBoundingCube();
+
+  // Pintar todas las caras en orden (sólidas y con bordes negros para colocadas)
+  facesAll.forEach(f=>{
+    ctx.save();
+    ctx.globalAlpha = f.alpha;
+    ctx.beginPath();
+    ctx.moveTo(f.vs[0][0], f.vs[0][1]);
+    for(let i=1;i<f.vs.length;i++) ctx.lineTo(f.vs[i][0], f.vs[i][1]);
+    ctx.closePath();
+    ctx.fillStyle = f.fill; ctx.fill();
+    ctx.strokeStyle = f.stroke; ctx.lineWidth = f.lw; ctx.stroke();
+    ctx.restore();
+  });
+
+  // Resaltado dorado de caras que se completarían (mejorado con pulsación)
+  if(highlightPlanes && highlightPlanes.length){
+    const uniqueKeys = new Set();
+    const cells=[];
+    highlightPlanes.forEach(plane=>{
+      plane.forEach(c=>{ const k=c.x+','+c.y+','+c.z; if(!uniqueKeys.has(k)){ uniqueKeys.add(k); cells.push(c);} });
+    });
+    const pulse = 0.18 + 0.14*Math.abs(Math.sin(performance.now()/220));
+    cells.forEach(c=>{
+      const wp=[c.x-1,c.y-1,c.z-1];
+      const mask = maskFor(c.x,c.y,c.z);
+      drawUnitCube(wp, '#ffd700', true, pulse, mask, false);
+      drawSparkles(wp);
+    });
+  }
+
+  // Animación de eliminación (se mantiene)
+  const now = performance.now();
+  const anims = [];
+  eliminatingCubes = eliminatingCubes.filter(a=>{
+    const t = (now - a.startTime)/a.fadeMs; if(t>=1) return false;
+    anims.push({...a, t}); return true;
+  });
+  anims.forEach(a=>{
+    drawUnitCube(a.pos, shadeColor(a.color, 1.1), true, 1-a.t, null, false);
+    drawUnitCube(a.pos, '#ffd700', true, 0.18*(1-a.t), null, false);
+  });
+}
+
+function drawSparkles(pos){
+  // dibuja pequeñas chispas doradas alrededor del centro proyectado
+  const m = rotMatrix(rotX, rotY);
+  const [sx,sy] = project(m.apply(pos));
+  const t = performance.now()/100;
+  ctx.save();
+  for(let i=0;i<6;i++){
+    const ang = (i/6)*Math.PI*2 + (t*0.15);
+    const r = 6 + 2*Math.sin(t*0.2 + i);
+    const x = sx + Math.cos(ang)*r;
+    const y = sy + Math.sin(ang)*r;
+    ctx.fillStyle='rgba(255,215,0,0.85)';
+    ctx.beginPath(); ctx.arc(x,y,1.6,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawBoundingCube(){
+  // draw 27 grid small cube placeholders as faint outlines
+  const m = rotMatrix(rotX, rotY);
+  for(let x=0;x<3;x++) for(let y=0;y<3;y++) for(let z=0;z<3;z++){
+    const wp=[x-1,y-1,z-1];
+    // parpadeo rojo suave para celdas vacías previo a game over
+    if(gameOverBlinking && GRID[x][y][z]===null){
+      const a = 0.25 + 0.2*Math.abs(Math.sin(performance.now()/180));
+      ctx.save(); ctx.globalAlpha=a; drawUnitCube(wp, '#ff4d4f', true, a); ctx.restore();
+    } else {
+      // outlines tenues por defecto
+      ctx.save(); ctx.globalAlpha=0.08; drawUnitCube(wp, '#ffffff', true, 0.08); ctx.restore();
+    }
+  }
+}
+
+// animation
+(function loop(){ 
+  draw(); 
+  requestAnimationFrame(loop); 
+})();
+
+// Initial draw
+draw();
+
+// keyboard: press R to reset
+window.addEventListener('keydown',e=>{ 
+  if(e.key==='r' || e.key==='R'){ 
+    for(let x=0;x<3;x++) for(let y=0;y<3;y++) for(let z=0;z<3;z++) GRID[x][y][z]=null; 
+    score=0; 
+    scoreEl.textContent='Score: 0'; 
+    eliminatingCubes=[]; highlightPlanes=[]; lastPlanesRemoved=0;
+    gameOver=false; if(gameOverOverlay){ gameOverOverlay.remove(); gameOverOverlay=null; }
+  }
+  if(e.key==='Escape'){
+    if(!gameOver && (draggingPiece || ghostPosition)){
+      cancelDragSelection();
+    }
+  }
+});
+
+function showLineCompleteEffect(){
+  scoreEl.style.transition='all 0.25s ease';
+  scoreEl.style.background='rgba(255,215,0,0.8)';
+  scoreEl.style.transform='scale(1.1)';
+  setTimeout(()=>{scoreEl.style.background='rgba(0,0,0,0.4)'; scoreEl.style.transform='scale(1)';}, 280);
+}
+
+function showToast(msg){
+  const d=document.createElement('div');
+  d.textContent=msg;
+  Object.assign(d.style, {
+    position:'fixed',left:'50%',top:'40%',transform:'translate(-50%,-50%) scale(0.9)',
+    color:'#fff',fontWeight:'800',fontSize:'64px',letterSpacing:'1px',
+    textShadow:'0 0 12px rgba(255,215,0,0.9), 0 0 28px rgba(255,140,0,0.6)',
+    opacity:'0',transition:'all 280ms ease',pointerEvents:'none',zIndex:9999
+  });
+  document.body.appendChild(d);
+  requestAnimationFrame(()=>{ d.style.opacity='1'; d.style.transform='translate(-50%,-50%) scale(1)'; });
+  setTimeout(()=>{ d.style.opacity='0'; d.style.transform='translate(-50%,-60%) scale(0.96)'; }, 700);
+  setTimeout(()=>{ d.remove(); }, 1100);
+}
+
+// --- Fin de juego ---
+function canPlaceAnywhere(piece){
+  // ¿existe alguna posición válida para esta pieza con su orientación actual?
+  for(let x=0;x<3;x++) for(let y=0;y<3;y++) for(let z=0;z<3;z++){
+    let ok=true;
+    for(let i=0;i<piece.cells.length;i++){
+      const c = piece.cells[i];
+      const gx = x + c[0], gy = y + c[1], gz = z + (c[2]||0);
+      if(gx<0||gx>=3||gy<0||gy>=3||gz<0||gz>=3 || GRID[gx][gy][gz]!==null){ ok=false; break; }
+    }
+    if(ok) return true;
+  }
+  return false;
+}
+
+function triggerGameOver(){
+  // fase de parpadeo rojo
+  gameOverBlinking = true; draggingPiece=null; ghostPosition=null; ghostValid=false; highlightPlanes=[];
+  setTimeout(()=>{
+    gameOverBlinking = false; gameOver = true;
+  // establecer baseline si aún no existe
+  if(!baselineSet){ baselineSet = true; }
+  // siempre actualizar el mayor puntaje al finalizar la partida
+  highScore = Math.max(highScore, score);
+  updateHighScorePanelNumbers();
+  updateHighScorePanelProgress();
+    // overlay
+    const overlay = document.createElement('div');
+    gameOverOverlay = overlay;
+    Object.assign(overlay.style,{
+      position:'fixed',left:'0',top:'0',right:'0',bottom:'0',
+      background:'rgba(0,0,0,0.82)',display:'flex',flexDirection:'column',
+      alignItems:'center',justifyContent:'center',zIndex:10000,color:'#fff'
+    });
+    const title=document.createElement('div');
+    title.textContent='FIN DEL JUEGO';
+    Object.assign(title.style,{fontSize:'72px',fontWeight:'900',letterSpacing:'2px',marginBottom:'10px',textAlign:'center'});
+    const sc=document.createElement('div');
+    sc.textContent=`SCORE: ${score}`;
+    Object.assign(sc.style,{fontSize:'48px',fontWeight:'800',opacity:'0.95',marginBottom:'24px'});
+    const btn=document.createElement('button');
+    btn.innerHTML='↻ Reiniciar';
+    Object.assign(btn.style,{
+      fontSize:'24px',padding:'12px 22px',border:'none',borderRadius:'10px',
+      background:'#20c997',color:'#003024',fontWeight:'900',cursor:'pointer',
+      boxShadow:'0 6px 20px rgba(32,201,151,0.35)'
+    });
+    btn.addEventListener('click',resetGame);
+    overlay.appendChild(title); overlay.appendChild(sc); overlay.appendChild(btn);
+    document.body.appendChild(overlay);
+  }, 1500);
+}
+
+function checkGameOver(){
+  if(!canPlaceAnywhere(currentPiece) && !gameOver && !gameOverBlinking){
+    triggerGameOver();
+  }
+}
+
+function resetGame(){
+  for(let x=0;x<3;x++) for(let y=0;y<3;y++) for(let z=0;z<3;z++) GRID[x][y][z]=null; 
+  score=0; scoreEl.textContent='Score: 0';
+  eliminatingCubes=[]; highlightPlanes=[]; lastPlanesRemoved=0; draggingPiece=null;
+  ghostPosition=null; ghostValid=false; gameOver=false; gameOverBlinking=false;
+  consecutivePlanes=0; animationQueue=[]; isAnimating=false; hasShownRecordThisRun=false; // no borrar highScore
+  if(gameOverOverlay){ gameOverOverlay.remove(); gameOverOverlay=null; }
+  currentPiece = randomPiece(); 
+  nextPiece = randomPiece();
+  drawCurrentPiece();
+  drawMiniNext();
+  // Mostrar panel de mayor puntaje tras reiniciar
+  hsPanel.style.display = 'block';
+  updateHighScorePanelNumbers();
+  updateHighScorePanelProgress();
+}
+
+function updateHighScorePanelNumbers(){
+  hsValueEl.textContent = highScore.toString();
+}
+function updateHighScorePanelProgress(){
+  const target = Math.max(1, highScore); // evita división por cero
+  const pct = Math.max(0, Math.min(100, Math.floor((score/target)*100)));
+  hsBarFill.style.width = pct + '%';
+}
+function toggleScoreBlink(){
+  if(baselineSet && score >= highScore && score>0){
+    scoreEl.classList.add('record-blink');
+  } else {
+    scoreEl.classList.remove('record-blink');
+  }
+}
+
+// Partículas para efectos
+function createSparkleParticle(){
+  const icons=['✨','⭐','🌟','💫','🎊'];
+  const el=document.createElement('div'); el.textContent=icons[Math.floor(Math.random()*icons.length)];
+  Object.assign(el.style,{
+    position:'fixed',left:(40+Math.random()*20)+'%',top:(28+Math.random()*24)+'%',
+    fontSize:(18+Math.random()*16)+'px',zIndex:99997,opacity:'1',pointerEvents:'none',
+    transition:`all ${1400+Math.random()*900}ms cubic-bezier(0.25,0.46,0.45,0.94)`
+  });
+  document.body.appendChild(el);
+  setTimeout(()=>{
+    el.style.left=(Math.random()*100)+'%'; el.style.top=(Math.random()*100)+'%';
+    el.style.opacity='0'; el.style.transform=`scale(${0.6+Math.random()*0.6}) rotate(${Math.random()*720}deg)`;
+  },60);
+  setTimeout(()=>{ el.remove(); },3000);
+}
+
+// init
+renderLoopCurrentPiece();
+function renderLoopCurrentPiece(){ 
+  drawCurrentPiece(); 
+  drawCurrentPiece2D();
+  drawMiniNext();
+  requestAnimationFrame(renderLoopCurrentPiece); 
+}
+
+</script>
+</body>
+</html>
