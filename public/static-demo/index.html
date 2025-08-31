@@ -810,6 +810,8 @@ let nextPiece = generateSmartPiece();
 let draggingPiece = null; // {cells,colors}
 let ghostPosition = null; // {x,y,z}
 let ghostValid = false;
+// Identificador incremental por pieza colocada, para distinguir caras de contacto entre piezas distintas
+let pieceIdCounter = 0;
 // Ya no hay selección lateral ni labels
 // Modo bonus: hasta 3 opciones cuando se eliminan cubos blancos
 let extraChoiceActive = false;        // si está activo el modo de multiple piezas
@@ -1241,7 +1243,8 @@ function attemptPlace(){
   const inBounds = indices.every(i=>i.x>=0&&i.x<3&&i.y>=0&&i.y<3&&i.z>=0&&i.z<3);
   const empty = inBounds && indices.every(i=>GRID[i.x][i.y][i.z]===null);
   if(inBounds && empty){
-  // place (con color y tipo de bonus por cubo si existe)
+  // place (con color y tipo de bonus por cubo si existe) y pieceId por pieza
+  const thisPieceId = ++pieceIdCounter;
   indices.forEach((idx,i)=>{ 
     const col = draggingPiece.colors?.[i] || draggingPiece.colors?.[0] || '#ffffff'; 
     // Solo asignar bonusType a cubos blancos; respeta '+2' si viene en la pieza
@@ -1249,7 +1252,7 @@ function attemptPlace(){
     if (typeof col === 'string' && col.toLowerCase() === '#ffffff') {
       bonusType = draggingPiece.bonusType || '+1';
     }
-    GRID[idx.x][idx.y][idx.z] = {color: col, bonusType: bonusType}; 
+    GRID[idx.x][idx.y][idx.z] = {color: col, bonusType: bonusType, pieceId: thisPieceId}; 
   });
     // score por colocar
     score += 10 * draggingPiece.cells.length;
@@ -1557,16 +1560,9 @@ function draw(){
       if(gx>=0&&gx<3&&gy>=0&&gy<3&&gz>=0&&gz<3) { occ[gx][gy][gz]=true; ghostCells.push([gx,gy,gz]); }
     });
   }
-  // helper visible faces mask (devuelve objeto con nombres)
+  // helper visible faces mask (siempre muestra todas las caras para evitar huecos visuales)
   function maskFor(x,y,z){
-    const vis = {back:false,front:false,bottom:false,top:false,right:false,left:false};
-    vis.back   = (z-1<0) || !occ[x][y][z-1];   // -Z
-    vis.front  = (z+1>2) || !occ[x][y][z+1];   // +Z
-    vis.bottom = (y-1<0) || !occ[x][y-1][z];   // -Y
-    vis.top    = (y+1>2) || !occ[x][y+1][z];   // +Y
-    vis.right  = (x+1>2) || !occ[x+1][y][z];   // +X
-    vis.left   = (x-1<0) || !occ[x-1][y][z];   // -X
-    return vis;
+    return {back:true,front:true,bottom:true,top:true,right:true,left:true};
   }
 
   // Construir lista de cubos a renderizar (reales + ghost)
@@ -1872,6 +1868,7 @@ function resetGame(){
   // Reiniciar sistema heurístico
   recentPiecesHistory = [];
   consecutiveLine3Count = 0;
+  pieceIdCounter = 0;
   
   // Reiniciar sistema de bonus
   extraChoiceActive = false;
