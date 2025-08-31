@@ -46,11 +46,11 @@
       padding: 10px;
     }
     
-    /* Mini vistas internas (1/9 del área cada una) */
+    /* Mini vistas internas: tamaño fijo para evitar distorsión */
     #mini-next, #current-piece-2d {
       position: absolute;
-      width: 33.333%;
-      height: 33.333%;
+      width: 64px;
+      height: 64px;
       background: rgba(255,255,255,0.06);
       border-radius: 8px;
       border: 2px solid rgba(0,0,0,0.35);
@@ -236,6 +236,28 @@ const miniNextCanvas = document.getElementById('mini-next');
 const miniNextCtx = miniNextCanvas.getContext('2d');
 
 function randColor(){ const cols=['#ff6b6b','#ffd93d','#6bcB77','#4dabf7','#c77df7','#f28e1c','#00ccb1']; return cols[Math.floor(Math.random()*cols.length)]; }
+
+// Probabilidad de que 1 cubo de la pieza sea blanco con bonificación
+const WHITE_CUBE_CHANCE = 0.12; // 12% para +1
+const WHITE_CUBE_SUPER_CHANCE = 0.03; // 3% para +2 (más raro)
+function maybeApplyWhiteCube(piece){
+  try{
+    if(!piece || !piece.cells || !piece.colors) return piece;
+    const totalChance = WHITE_CUBE_CHANCE + WHITE_CUBE_SUPER_CHANCE;
+    if(Math.random() < totalChance){
+      const i = Math.floor(Math.random()*piece.cells.length);
+      const isSuperBonus = Math.random() < (WHITE_CUBE_SUPER_CHANCE / totalChance);
+      if (isSuperBonus) {
+        piece.colors[i] = '#ffffff';
+        piece.bonusType = '+2'; // Marcar como super bonus
+      } else {
+        piece.colors[i] = '#ffffff';
+        piece.bonusType = '+1'; // Marcar como bonus normal
+      }
+    }
+  }catch(_){}
+  return piece;
+}
 
 function randomPiece(){
   // create 1-3 block polycube con rotación aleatoria en 3D (24 orientaciones del cubo)
@@ -753,13 +775,14 @@ function generateSmartPiece() {
   // Actualizar historia
   updatePieceHistory(selectedPiece);
   
-  return selectedPiece;
+  // Aplicar color blanco ocasional a un cubo (visual)
+  return maybeApplyWhiteCube(selectedPiece);
 }
 
 function randomPieceWithHistory() {
   const piece = randomPiece();
   updatePieceHistory(piece);
-  return piece;
+  return maybeApplyWhiteCube(piece);
 }
 
 function updatePieceHistory(piece) {
@@ -788,13 +811,24 @@ let draggingPiece = null; // {cells,colors}
 let ghostPosition = null; // {x,y,z}
 let ghostValid = false;
 // Ya no hay selección lateral ni labels
+// Modo bonus: hasta 3 opciones cuando se eliminan cubos blancos
+let extraChoiceActive = false;        // si está activo el modo de multiple piezas
+let currentPieceAlt = null;           // pieza alternativa #1 (izquierda en modo 2, izquierda en modo 3)
+let currentPieceAlt2 = null;          // pieza alternativa #2 (solo en modo 3, centro)
+let draggingFromAlt = false;          // true si el arrastre proviene de la pieza izquierda
+let draggingFromAlt2 = false;         // true si el arrastre proviene de la pieza centro (modo 3)
+let pendingBonusChoices = 0;          // bonus +1 en cola
+let pendingSuperBonusChoices = 0;     // bonus +2 en cola
+let lastWhiteRemovedCount = 0;        // número de cubos blancos +1 eliminados
+let lastSuperWhiteRemovedCount = 0;   // número de cubos blancos +2 eliminados
+let choicesMode = 1;                  // 1=normal, 2=dual choice, 3=triple choice
 
 // Helper para dibujar una pieza 3D con la misma orientación del cubo principal
-function drawPiecePreview3D(canvas, ctxP, piece, scale = 1) {
+function drawPiecePreview3D(canvas, ctxP, piece, scale = 1, showLabels = true) {
   ctxP.clearRect(0, 0, canvas.width, canvas.height);
   if(!piece) return;
 
-  const cells = piece.cells.map(([x,y,z=0])=>({x,y,z}));
+  const cells = piece.cells.map(([x,y,z=0], idx)=>({x,y,z, idx}));
   let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity;
   cells.forEach(({x,y,z})=>{minX=Math.min(minX,x);minY=Math.min(minY,y);minZ=Math.min(minZ,z);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);maxZ=Math.max(maxZ,z);});
   const cx=(minX+maxX)/2, cy=(minY+maxY)/2, cz=(minZ+maxZ)/2;
@@ -823,7 +857,7 @@ function drawPiecePreview3D(canvas, ctxP, piece, scale = 1) {
   }
 
   const s = 0.45;
-  const color = piece.colors[0];
+  // color por cubo si existe
   const facesDef = [
     {key:'back',  idx:[0,1,2,3], shade:0.7},
     {key:'front', idx:[4,5,6,7], shade:1.0},
@@ -834,7 +868,7 @@ function drawPiecePreview3D(canvas, ctxP, piece, scale = 1) {
   ];
 
   const facesAll=[];
-  cells.forEach(({x,y,z})=>{
+  cells.forEach(({x,y,z,idx})=>{
     const pos=[(x-cx),(y-cy),(z-cz)];
     const localVerts=[
       [-s,-s,-s],[s,-s,-s],[s,s,-s],[-s,s,-s],
@@ -848,7 +882,15 @@ function drawPiecePreview3D(canvas, ctxP, piece, scale = 1) {
       if(mask[fd.key]===false) continue;
       const zAvg = fd.idx.reduce((acc,i)=>acc+localVerts[i][2],0)/4;
       const vs = fd.idx.map(i=>projectP(localVerts[i]));
-      facesAll.push({depth:zAvg, vs, fill:shadeColor(color, fd.shade)});
+      const baseCol = piece.colors?.[idx] || piece.colors?.[0] || '#cccccc';
+      const isWhite = (typeof baseCol === 'string') && baseCol.toLowerCase() === '#ffffff';
+      let labelText = null;
+      if (isWhite && piece.bonusType) {
+        labelText = piece.bonusType; // '+1' o '+2'
+      } else if (isWhite) {
+        labelText = '+1'; // fallback
+      }
+      facesAll.push({depth:zAvg, vs, fill:shadeColor(baseCol, fd.shade), label: labelText});
     }
   });
   facesAll.sort((a,b)=>a.depth-b.depth);
@@ -861,17 +903,100 @@ function drawPiecePreview3D(canvas, ctxP, piece, scale = 1) {
     ctxP.closePath();
     ctxP.fillStyle=f.fill; ctxP.fill();
     ctxP.strokeStyle='rgba(0,0,0,0.95)'; ctxP.lineWidth=2; ctxP.stroke();
+    // Etiqueta '+1'/'+2' centrada en la cara si aplica
+    if (showLabels && f.label){
+      const cx = (f.vs[0][0]+f.vs[1][0]+f.vs[2][0]+f.vs[3][0])/4;
+      const cy = (f.vs[0][1]+f.vs[1][1]+f.vs[2][1]+f.vs[3][1])/4;
+      ctxP.save();
+      ctxP.font = 'bold 14px Inter, Segoe UI, Arial';
+      ctxP.textAlign = 'center'; ctxP.textBaseline = 'middle';
+      ctxP.strokeStyle = 'rgba(0,0,0,0.85)'; ctxP.lineWidth = 3;
+      ctxP.strokeText(f.label, cx, cy);
+      ctxP.fillStyle = '#111';
+      ctxP.fillText(f.label, cx, cy);
+      ctxP.restore();
+    }
   }
   ctxP.restore();
 }
 
 function drawCurrentPiece() {
-  drawPiecePreview3D(currentPieceCanvas, currentPieceCtx, currentPiece, 1.5);
+  const c = currentPieceCanvas, ctx = currentPieceCtx;
+  
+  // Determinar modo y dimensiones según número de opciones
+  let targetWidth, contTargetWidth;
+  if (choicesMode === 3) {
+    targetWidth = 480; // 3 piezas: 160*3
+    contTargetWidth = targetWidth + 20;
+  } else if (choicesMode === 2) {
+    targetWidth = 320; // 2 piezas: 160*2  
+    contTargetWidth = targetWidth + 20;
+  } else {
+    targetWidth = 160; // 1 pieza: 160*1
+    contTargetWidth = 200;
+  }
+  
+  const targetHeight = 160;
+  
+  // Ajustar contenedor y canvas
+  if (pieceContainer.style.width !== contTargetWidth + 'px') {
+    pieceContainer.style.width = contTargetWidth + 'px';
+  }
+  if (c.width !== targetWidth) {
+    c.width = targetWidth;
+    c.style.width = targetWidth + 'px';
+  }
+  if (c.height !== targetHeight) {
+    c.height = targetHeight;
+    c.style.height = targetHeight + 'px';
+  }
+  ctx.clearRect(0,0,c.width,c.height);
+  
+  // Renderizar según el modo
+  if (choicesMode === 1) {
+    // Modo normal: una sola pieza
+    drawPiecePreview3D(c, ctx, currentPiece, 1.5);
+  } else if (choicesMode === 2) {
+    // Modo dual: izquierda = alternativa, derecha = actual
+    const offR = document.createElement('canvas');
+    offR.width = 160; offR.height = 160; const offRCtx = offR.getContext('2d');
+    drawPiecePreview3D(offR, offRCtx, currentPiece, 1.5);
+    const offL = document.createElement('canvas');
+    offL.width = 160; offL.height = 160; const offLCtx = offL.getContext('2d');
+    drawPiecePreview3D(offL, offLCtx, currentPieceAlt, 1.5);
+    
+    const dw = 140, dh = 160;
+    const gap = 20;
+    const margin = (c.width - (dw*2 + gap)) / 2;
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(offL, 0, 0, 160, 160, Math.round(margin), 0, dw, dh);
+    ctx.drawImage(offR, 0, 0, 160, 160, Math.round(margin + dw + gap), 0, dw, dh);
+  } else if (choicesMode === 3) {
+    // Modo triple: izquierda = alt, centro = alt2, derecha = actual
+    const offR = document.createElement('canvas');
+    offR.width = 160; offR.height = 160; const offRCtx = offR.getContext('2d');
+    drawPiecePreview3D(offR, offRCtx, currentPiece, 1.5);
+    const offL = document.createElement('canvas');
+    offL.width = 160; offL.height = 160; const offLCtx = offL.getContext('2d');
+    drawPiecePreview3D(offL, offLCtx, currentPieceAlt, 1.5);
+    const offC = document.createElement('canvas');
+    offC.width = 160; offC.height = 160; const offCCtx = offC.getContext('2d');
+    drawPiecePreview3D(offC, offCCtx, currentPieceAlt2, 1.5);
+    
+    const dw = 140, dh = 160;
+    const gap = 20;
+    const margin = (c.width - (dw*3 + gap*2)) / 2;
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(offL, 0, 0, 160, 160, Math.round(margin), 0, dw, dh);
+    ctx.drawImage(offC, 0, 0, 160, 160, Math.round(margin + dw + gap), 0, dw, dh);
+    ctx.drawImage(offR, 0, 0, 160, 160, Math.round(margin + (dw + gap) * 2), 0, dw, dh);
+  }
 }
 
 // Dibujar las piezas siguientes
 function drawMiniNext(){
-  drawPiecePreview3D(miniNextCanvas, miniNextCtx, nextPiece, 1.1);
+  // No mostrar etiquetas '+1' en la miniatura de la pieza siguiente
+  drawPiecePreview3D(miniNextCanvas, miniNextCtx, nextPiece, 1.1, false);
 }
 
 // Miniatura 2D: proyecta la pieza usando los 2 ejes con mayor rango (garantiza mostrar la forma completa)
@@ -901,13 +1026,14 @@ function drawCurrentPiece2D(){
   const cellSize = Math.max(6, Math.floor(Math.min(c.width/(w+0.5), c.height/(h+0.5))));
   const offX = Math.floor((c.width - cellSize*w)/2);
   const offY = Math.floor((c.height - cellSize*h)/2);
-  const color = currentPiece.colors[0];
+  // Dibujo por celda con color propio
 
   // Dibujar celdas 2D (orden estable)
-  projected.forEach(([a,b])=>{
+  projected.forEach(([a,b], idx)=>{
     const px = offX + (a-minA)*cellSize + 1;
     const py = offY + (b-minB)*cellSize + 1;
-    ctx2.fillStyle = color;
+    const col = currentPiece.colors?.[idx] || currentPiece.colors?.[0] || '#ffffff';
+    ctx2.fillStyle = col;
     ctx2.fillRect(px, py, cellSize-2, cellSize-2);
     ctx2.strokeStyle='rgba(0,0,0,0.95)';
     ctx2.lineWidth=2; ctx2.strokeRect(px, py, cellSize-2, cellSize-2);
@@ -923,7 +1049,82 @@ pieceContainer.addEventListener('mousedown', e => {
   e.stopPropagation();
   mouse.down = true;
   mouse.draggingPiece = true;
-  startDragging(currentPiece);
+  // Detectar de cual pieza se está arrastrando según el modo
+  const target = e.target;
+  if (choicesMode > 1 && target === currentPieceCanvas) {
+    const rect = currentPieceCanvas.getBoundingClientRect();
+    const relX = e.clientX - rect.left;
+    
+    if (choicesMode === 2) {
+      // Modo dual: izquierda/derecha
+      draggingFromAlt = relX < rect.width/2;
+      draggingFromAlt2 = false;
+      startDragging(draggingFromAlt ? currentPieceAlt : currentPiece);
+    } else if (choicesMode === 3) {
+      // Modo triple: dividir en 3 secciones
+      const sectionWidth = rect.width / 3;
+      if (relX < sectionWidth) {
+        // Izquierda: currentPieceAlt
+        draggingFromAlt = true;
+        draggingFromAlt2 = false;
+        startDragging(currentPieceAlt);
+      } else if (relX < sectionWidth * 2) {
+        // Centro: currentPieceAlt2
+        draggingFromAlt = false;
+        draggingFromAlt2 = true;
+        startDragging(currentPieceAlt2);
+      } else {
+        // Derecha: currentPiece
+        draggingFromAlt = false;
+        draggingFromAlt2 = false;
+        startDragging(currentPiece);
+      }
+    }
+  } else {
+    draggingFromAlt = false;
+    draggingFromAlt2 = false;
+    startDragging(currentPiece);
+  }
+});
+
+// También manejar click directamente en el canvas para precisión en la selección
+currentPieceCanvas.addEventListener('mousedown', e => {
+  if(gameOver) return;
+  e.stopPropagation();
+  mouse.down = true;
+  mouse.draggingPiece = true;
+  
+  if (choicesMode > 1) {
+    const rect = currentPieceCanvas.getBoundingClientRect();
+    const relX = e.clientX - rect.left;
+    
+    if (choicesMode === 2) {
+      // Modo dual
+      draggingFromAlt = relX < rect.width/2;
+      draggingFromAlt2 = false;
+      startDragging(draggingFromAlt ? currentPieceAlt : currentPiece);
+    } else if (choicesMode === 3) {
+      // Modo triple
+      const sectionWidth = rect.width / 3;
+      if (relX < sectionWidth) {
+        draggingFromAlt = true;
+        draggingFromAlt2 = false;
+        startDragging(currentPieceAlt);
+      } else if (relX < sectionWidth * 2) {
+        draggingFromAlt = false;
+        draggingFromAlt2 = true;
+        startDragging(currentPieceAlt2);
+      } else {
+        draggingFromAlt = false;
+        draggingFromAlt2 = false;
+        startDragging(currentPiece);
+      }
+    }
+  } else {
+    draggingFromAlt = false;
+    draggingFromAlt2 = false;
+    startDragging(currentPiece);
+  }
 });
 
 canvas.addEventListener('mousemove',e=>{
@@ -969,6 +1170,8 @@ canvas.addEventListener('mouseup',e=>{
     attemptPlace();
   }
   mouse.draggingPiece=false;
+  draggingFromAlt=false;
+  draggingFromAlt2=false;
 });
 
 function startDragging(piece){
@@ -1038,8 +1241,16 @@ function attemptPlace(){
   const inBounds = indices.every(i=>i.x>=0&&i.x<3&&i.y>=0&&i.y<3&&i.z>=0&&i.z<3);
   const empty = inBounds && indices.every(i=>GRID[i.x][i.y][i.z]===null);
   if(inBounds && empty){
-    // place
-    indices.forEach((idx,i)=>{ GRID[idx.x][idx.y][idx.z] = {color: draggingPiece.colors[0]}; });
+  // place (con color y tipo de bonus por cubo si existe)
+  indices.forEach((idx,i)=>{ 
+    const col = draggingPiece.colors?.[i] || draggingPiece.colors?.[0] || '#ffffff'; 
+    // Solo asignar bonusType a cubos blancos; respeta '+2' si viene en la pieza
+    let bonusType = null;
+    if (typeof col === 'string' && col.toLowerCase() === '#ffffff') {
+      bonusType = draggingPiece.bonusType || '+1';
+    }
+    GRID[idx.x][idx.y][idx.z] = {color: col, bonusType: bonusType}; 
+  });
     // score por colocar
     score += 10 * draggingPiece.cells.length;
     // eliminar caras completas y aplicar bonus
@@ -1080,12 +1291,97 @@ function attemptPlace(){
     }
     scoreEl.textContent = `Score: ${score}`;
   toggleScoreBlink();
-  // nueva pieza - promover mini siguiente
-  animatePromoteNext(nextPiece);
-  currentPiece = nextPiece;
-  nextPiece = generateSmartPiece();
-  drawCurrentPiece();
-  drawMiniNext();
+  // Lógica de promoción y bonus mejorada para +1 y +2
+  const whiteTriggered = lastWhiteRemovedCount > 0;
+  const superWhiteTriggered = lastSuperWhiteRemovedCount > 0;
+  
+  // Verificar que tenemos las piezas necesarias para el modo actual
+  if (!currentPiece) currentPiece = generateSmartPiece();
+  if (choicesMode >= 2 && !currentPieceAlt) currentPieceAlt = generateSmartPiece();
+  if (choicesMode >= 3 && !currentPieceAlt2) currentPieceAlt2 = generateSmartPiece();
+  
+  if (choicesMode > 1) {
+    // Durante bonus múltiple, NO promover la siguiente. Consumir una pieza y reducir el modo.
+    // Agregar bonus en cola si corresponde
+    if (whiteTriggered) pendingBonusChoices++;
+    if (superWhiteTriggered) pendingSuperBonusChoices++;
+    
+    // Determinar nueva configuración según qué pieza se colocó
+    if (choicesMode === 2) {
+      // Modo dual -> modo normal
+      if (draggingFromAlt) {
+        // Se colocó la izquierda (alt), mantener la derecha (actual)
+        // currentPiece permanece igual
+      } else {
+        // Se colocó la derecha (actual), promover la izquierda
+        currentPiece = currentPieceAlt;
+      }
+      currentPieceAlt = null;
+      choicesMode = 1;
+      extraChoiceActive = false;
+    } else if (choicesMode === 3) {
+      // Modo triple -> modo dual
+      if (draggingFromAlt) {
+        // Se colocó la izquierda (alt), mantener centro y derecha
+        currentPieceAlt = currentPieceAlt2;
+        // currentPiece permanece igual
+      } else if (draggingFromAlt2) {
+        // Se colocó el centro (alt2), mantener izquierda y derecha
+        // currentPieceAlt permanece igual
+        // currentPiece permanece igual
+      } else {
+        // Se colocó la derecha (actual), promover izquierda y centro
+        currentPiece = currentPieceAlt2;
+        currentPieceAlt = currentPieceAlt;
+      }
+      currentPieceAlt2 = null;
+      choicesMode = 2;
+      extraChoiceActive = true;
+    }
+    
+    // Procesar bonus en cola para determinar nuevo modo
+    if (pendingSuperBonusChoices > 0) {
+      // Super bonus tiene prioridad: activar modo triple
+      choicesMode = 3;
+      extraChoiceActive = true;
+      if (!currentPieceAlt) currentPieceAlt = generateSmartPiece();
+      if (!currentPieceAlt2) currentPieceAlt2 = generateSmartPiece();
+      pendingSuperBonusChoices--;
+    } else if (pendingBonusChoices > 0) {
+      // Bonus normal: activar modo dual si no estamos ya en triple
+      if (choicesMode < 2) {
+        choicesMode = 2;
+        extraChoiceActive = true;
+        if (!currentPieceAlt) currentPieceAlt = generateSmartPiece();
+      }
+      pendingBonusChoices--;
+    }
+    
+    drawCurrentPiece();
+    // mini-next no cambia durante bonus
+  } else {
+    // Flujo normal desde modo único: promover mini siguiente a actual
+    animatePromoteNext(nextPiece);
+    currentPiece = nextPiece;
+    nextPiece = generateSmartPiece();
+    
+    // Activar bonus según los cubos eliminados
+    if (superWhiteTriggered) {
+      // Super bonus +2: modo triple (3 opciones)
+      choicesMode = 3;
+      extraChoiceActive = true;
+      currentPieceAlt = generateSmartPiece();
+      currentPieceAlt2 = generateSmartPiece();
+    } else if (whiteTriggered) {
+      // Bonus normal +1: modo dual (2 opciones)
+      choicesMode = 2;
+      extraChoiceActive = true;
+      currentPieceAlt = generateSmartPiece();
+    }
+    
+    drawCurrentPiece();
+    drawMiniNext();
+  }
     checkGameOver();
   }
   draggingPiece = null; ghostPosition=null; ghostValid=false; highlightPlanes=[];
@@ -1100,12 +1396,16 @@ function cancelDragSelection(){
   mouse.draggingPiece = false;
   mouse.down = false;
   mouse.dragStart = false;
+  draggingFromAlt = false;
+  draggingFromAlt2 = false;
 }
 
 function removeFullLines(){
   // eliminar CARAS (planos 3x3) completas
   let toRemove = [];
   lastPlanesRemoved = 0;
+  lastWhiteRemovedCount = 0;
+  lastSuperWhiteRemovedCount = 0;
   // X planes
   for(let x=0;x<3;x++){
     let full=true; for(let y=0;y<3;y++) for(let z=0;z<3;z++) if(GRID[x][y][z]===null) full=false;
@@ -1126,7 +1426,18 @@ function removeFullLines(){
   const list = Object.values(uniq);
   const now = performance.now();
   let removed=0;
-  list.forEach(p=>{ const c=GRID[p[0]][p[1]][p[2]]; if(c){ eliminatingCubes.push({pos:[p[0]-1,p[1]-1,p[2]-1], color:c.color, startTime:now, fadeMs:ELIMINATION_MS}); GRID[p[0]][p[1]][p[2]]=null; removed++; } });
+  list.forEach(p=>{ const c=GRID[p[0]][p[1]][p[2]]; if(c){
+      eliminatingCubes.push({pos:[p[0]-1,p[1]-1,p[2]-1], color:c.color, startTime:now, fadeMs:ELIMINATION_MS});
+      // Contar cubos blancos eliminados según su tipo de bonus
+      if (typeof c.color === 'string' && c.color.toLowerCase() === '#ffffff') {
+        if (c.bonusType === '+2') {
+          lastSuperWhiteRemovedCount++;
+        } else {
+          lastWhiteRemovedCount++; // '+1' o por defecto
+        }
+      }
+      GRID[p[0]][p[1]][p[2]]=null; removed++;
+    } });
   return removed;
 }
 
@@ -1241,7 +1552,7 @@ function draw(){
   for(let x=0;x<3;x++) for(let y=0;y<3;y++) for(let z=0;z<3;z++) if(GRID[x][y][z]) occ[x][y][z]=true;
   const ghostCells = [];
   if(ghostPosition && ghostValid && draggingPiece){
-    draggingPiece.cells.forEach(c=>{
+    draggingPiece.cells.forEach((c,ci)=>{
       const gx=ghostPosition.x+c[0], gy=ghostPosition.y+c[1], gz=ghostPosition.z+(c[2]||0);
       if(gx>=0&&gx<3&&gy>=0&&gy<3&&gz>=0&&gz<3) { occ[gx][gy][gz]=true; ghostCells.push([gx,gy,gz]); }
     });
@@ -1263,20 +1574,32 @@ function draw(){
   for(let x=0;x<3;x++) for(let y=0;y<3;y++) for(let z=0;z<3;z++){
     const cell = GRID[x][y][z];
     if(cell){ 
-      cubes.push({pos:[x-1,y-1,z-1], grid:[x,y,z], color:cell.color, mask:maskFor(x,y,z), isGhost:false, alpha:1});
+      // Incluir bonusType guardado en GRID para etiquetar correctamente '+1' o '+2'
+      cubes.push({pos:[x-1,y-1,z-1], grid:[x,y,z], color:cell.color, bonusType:cell.bonusType, mask:maskFor(x,y,z), isGhost:false, alpha:1});
     }
   }
   if(ghostCells.length){
-    const gColor = draggingPiece ? draggingPiece.colors[0] : '#ffffff';
-    ghostCells.forEach(([x,y,z])=>{
-      cubes.push({pos:[x-1,y-1,z-1], grid:[x,y,z], color:gColor, mask:maskFor(x,y,z), isGhost:true, alpha:0.58});
+    ghostCells.forEach(([x,y,z], idx)=>{
+      // inferir color del índice relativo buscando la celda correspondiente
+      let gColor = '#ffffff';
+      if (draggingPiece){
+        // map world ghost cell back to piece index
+        const ci = draggingPiece.cells.findIndex(c=> (ghostPosition.x+c[0])===x && (ghostPosition.y+c[1])===y && (ghostPosition.z+(c[2]||0))===z);
+        gColor = draggingPiece.colors?.[ci] || draggingPiece.colors?.[0] || '#ffffff';
+      }
+      // Propagar etiqueta de bonus al ghost si el cubo visible es blanco
+      let gBonus = null;
+      if (typeof gColor === 'string' && gColor.toLowerCase() === '#ffffff') {
+        gBonus = draggingPiece?.bonusType || '+1';
+      }
+      cubes.push({pos:[x-1,y-1,z-1], grid:[x,y,z], color:gColor, bonusType:gBonus, mask:maskFor(x,y,z), isGhost:true, alpha:0.58});
     });
   }
 
   // Función para construir las caras ya transformadas y proyectadas de un cubo
   const s = 0.45; // half-size of small cube
   function buildFaces(cube){
-    const {pos,color,mask,isGhost,alpha} = cube;
+  const {pos,color,mask,isGhost,alpha} = cube;
     const localVerts = [
       [-s,-s,-s],[s,-s,-s],[s,s,-s],[-s,s,-s],
       [-s,-s,s],[s,-s,s],[s,s,s],[-s,s,s]
@@ -1300,13 +1623,16 @@ function draw(){
       if(mask && mask[fd.key]===false) continue; // ocultar caras internas
       const zAvg = fd.idx.reduce((s,i)=>s+verts[i][2],0)/4;
       const vs = fd.idx.map(i=>project(verts[i]));
+      const isWhite = (typeof color === 'string') && color.toLowerCase() === '#ffffff';
       out.push({
         depth:zAvg,
         vs,
         fill: shadeColor(color, fd.shade),
         stroke: isGhost ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.95)',
         lw: isGhost ? 1.2 : 2.4,
-        alpha
+        alpha,
+        // Usar el bonusType del cubo (GRID o ghost) para decidir '+1' o '+2'
+        faceLabel: isWhite ? (cube.bonusType || null) : null
       });
     }
     return out;
@@ -1330,6 +1656,17 @@ function draw(){
     ctx.closePath();
     ctx.fillStyle = f.fill; ctx.fill();
     ctx.strokeStyle = f.stroke; ctx.lineWidth = f.lw; ctx.stroke();
+    if (f.faceLabel){
+      const cx = (f.vs[0][0]+f.vs[1][0]+f.vs[2][0]+f.vs[3][0])/4;
+      const cy = (f.vs[0][1]+f.vs[1][1]+f.vs[2][1]+f.vs[3][1])/4;
+      ctx.save();
+      ctx.font = 'bold 18px Inter, Segoe UI, Arial';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      // borde para legibilidad
+      ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.lineWidth = 3; ctx.strokeText(f.faceLabel, cx, cy);
+      ctx.fillStyle = '#111'; ctx.fillText(f.faceLabel, cx, cy);
+      ctx.restore();
+    }
     ctx.restore();
   });
 
@@ -1417,8 +1754,9 @@ window.addEventListener('keydown',e=>{
     recentPiecesHistory = [];
     consecutiveLine3Count = 0;
     
-    currentPiece = generateSmartPiece(); 
-    nextPiece = generateSmartPiece();
+  extraChoiceActive = false; currentPieceAlt = null; draggingFromAlt = false; pendingBonusChoices = 0; lastWhiteRemovedCount = 0;
+  currentPiece = generateSmartPiece(); 
+  nextPiece = generateSmartPiece();
     drawCurrentPiece();
     drawMiniNext();
   }
@@ -1534,6 +1872,18 @@ function resetGame(){
   // Reiniciar sistema heurístico
   recentPiecesHistory = [];
   consecutiveLine3Count = 0;
+  
+  // Reiniciar sistema de bonus
+  extraChoiceActive = false;
+  currentPieceAlt = null;
+  currentPieceAlt2 = null;
+  draggingFromAlt = false;
+  draggingFromAlt2 = false;
+  pendingBonusChoices = 0;
+  pendingSuperBonusChoices = 0;
+  lastWhiteRemovedCount = 0;
+  lastSuperWhiteRemovedCount = 0;
+  choicesMode = 1;
   
   currentPiece = generateSmartPiece(); 
   nextPiece = generateSmartPiece();
