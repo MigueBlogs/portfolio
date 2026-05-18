@@ -5,8 +5,10 @@ import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import YouTube, { YouTubeEvent } from 'react-youtube'
+import { useLanguage } from '@/components/language-provider'
 
 export default function Home() {
+  const { t } = useLanguage()
   const videoId = 'xk2LA59EAdg' // Default video ID
   const [windowWidth, setWindowWidth] = useState(0)
   const [isLightMode, setIsLightMode] = useState(false)
@@ -45,6 +47,11 @@ export default function Home() {
 
   useEffect(() => {
     //window.scrollTo(0, document.body.scrollHeight)
+    // Desactivar scrollbar en Home
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = 'auto'
+    }
   }, [])
 
   const opts = {
@@ -95,12 +102,12 @@ export default function Home() {
       </div>
       <div className="relative z-10 text-center text-white">
         <h1 className="text-4xl font-bold mb-4 animate-fade-in invisible">Miguel Vargas</h1>
-        <p className="text-xl mb-8 animate-fade-in-delay invisible">Computer Engineer | DevOps Specialist | Web Developer | XR Experiences</p>
+        <p className="text-xl mb-8 animate-fade-in-delay invisible">{t("Computer Engineer | DevOps Specialist | Web Developer | XR Experiences", "Ingeniero en Computación | Especialista DevOps | Desarrollador Web | Experiencias XR")}</p>
         <div className="space-y-4">
           {isButtonVisible && (
             <Button asChild variant="outline" className="animate-bounce bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
               <Link href="/about">
-                {isLightMode ? 'Learn More' : 'Learn More'} <ArrowRight className="ml-2 h-4 w-4" />
+                {isLightMode ? t('Learn More', 'Conoce Más') : t('Learn More', 'Conoce Más')} <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
           )}

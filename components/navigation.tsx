@@ -3,22 +3,26 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Menu, X, Home, User, Briefcase, Code, Globe, Star, Camera } from 'lucide-react'
+import { Menu, X, Home, User, Briefcase, Code, Globe, Star, Camera, CalendarDays } from 'lucide-react'
 import { ModeToggle } from './mode-toggle'
+import { LanguageToggle } from './language-toggle'
+import { useLanguage } from './language-provider'
 
 const navItems = [
-  { href: '/', label: 'Home', icon: Home },
-  { href: '/about', label: 'About', icon: User },
-  { href: '/experience', label: 'Experience', icon: Briefcase },
-  { href: '/projects', label: 'Projects', icon: Code },
-  { href: '/websites', label: 'Websites', icon: Globe },
-  { href: '/skills', label: 'Skills', icon: Star },
-  { href: '/media', label: 'Media', icon: Camera },
+  { href: '/', en: 'Home', es: 'Inicio', icon: Home },
+  { href: '/about', en: 'About', es: 'Acerca', icon: User },
+  { href: '/experience', en: 'Experience', es: 'Experiencia', icon: Briefcase },
+  { href: '/projects', en: 'Projects', es: 'Proyectos', icon: Code },
+  { href: '/websites', en: 'Websites', es: 'Sitios Web', icon: Globe },
+  { href: '/skills', en: 'Skills', es: 'Habilidades', icon: Star },
+  { href: '/schedule', en: 'Schedule', es: 'Agenda', icon: CalendarDays },
+  { href: '/media', en: 'Media', es: 'Media', icon: Camera },
 ]
 
 export default function Navigation() {
   const [isOpen, setIsOpen] = useState(false)
   const pathname = usePathname()
+  const { t } = useLanguage()
 
   return (
     <nav className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50 w-full border-b border-border/40">
@@ -41,11 +45,12 @@ export default function Navigation() {
                 }`}
               >
                 <item.icon className="mr-2 h-4 w-4" />
-                {item.label}
+                {t(item.en, item.es)}
               </Link>
             ))}
           </div>
           <div className="flex items-center">
+            <LanguageToggle />
             <ModeToggle />
             <div className="flex items-center sm:hidden">
               <button
@@ -79,7 +84,7 @@ export default function Navigation() {
                 onClick={() => setIsOpen(false)}
               >
                 <item.icon className="mr-2 h-4 w-4 inline" />
-                {item.label}
+                {t(item.en, item.es)}
               </Link>
             ))}
           </div>

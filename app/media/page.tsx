@@ -1,45 +1,57 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import YouTube from 'react-youtube'
 import { Globe } from 'lucide-react'
+import { useLanguage } from '@/components/language-provider'
 
 interface MediaAppearance {
-  title: string
-  date: string
+  titleEn: string
+  titleEs: string
+  dateEn: string
+  dateEs: string
   videoType: "facebook" | "youtube" | "iframe"
   videoUrl: string
 }
 
 const mediaAppearances: MediaAppearance[] = [
   {
-    title: "Live interview on Engineering Program at Radio UNAM",
-    date: "Jan 29, 2019",
+    titleEn: "Live interview on Engineering Program at Radio UNAM",
+    titleEs: "Entrevista en vivo en programa de Ingeniería de Radio UNAM",
+    dateEn: "Jan 29, 2019",
+    dateEs: "29 ene 2019",
     videoType: "facebook",
     videoUrl: "https://fb.watch/xgbK8v_D_f/"
   },
   {
-    title: "Featured in a national TV segment on Fr@ctal - ForoTV. Televisa",
-    date: "Mar 30, 2019",
+    titleEn: "Featured in a national TV segment on Fr@ctal - ForoTV. Televisa",
+    titleEs: "Participación en segmento nacional de Fr@ctal - ForoTV Televisa",
+    dateEn: "Mar 30, 2019",
+    dateEs: "30 mar 2019",
     videoType: "youtube",
     videoUrl: "https://www.youtube.com/watch?v=xk2LA59EAdg"
   },
   {
-    title: "Written feature on the news website SinEmbargomx",
-    date: "Dec 5, 2020",
+    titleEn: "Written feature on the news website SinEmbargomx",
+    titleEs: "Publicación en el sitio de noticias SinEmbargomx",
+    dateEn: "Dec 5, 2020",
+    dateEs: "5 dic 2020",
     videoType: "iframe",
     videoUrl: "https://www.sinembargo.mx/4073080/tepeyollotl-la-app-creada-por-dos-jovenes-ingenieros-mexicanos-para-simular-sismos/"
   },
   {
-    title: "Techtegia: Young Mexicans create app to simulate earthquakes",
-    date: "Dec 10, 2022",
+    titleEn: "Techtegia: Young Mexicans create app to simulate earthquakes",
+    titleEs: "Techtegia: Jóvenes mexicanos crean app para simular sismos",
+    dateEn: "Dec 10, 2022",
+    dateEs: "10 dic 2022",
     videoType: "iframe",
     videoUrl:"https://techtegia.com/2021/12/jovenes-mexicanos-crean-app-para-simular-sismos-llamada-tepeyollotl/"
   }
 ]
 
 export default function Media() {
+  const { language, t } = useLanguage()
+
   const renderMediaContent = (media: MediaAppearance) => {
     if (media.videoType === "facebook") {
       return (
@@ -81,19 +93,19 @@ export default function Media() {
 
   return (
     <div className="container mx-auto p-4 page-transition">
-      <h1 className="text-3xl font-bold mb-6">Media Appearances</h1>
+      <h1 className="text-3xl font-bold mb-6">{t("Media Appearances", "Apariciones en Medios")}</h1>
       <div className="grid gap-6 md:grid-cols-2">
         {mediaAppearances.map((media, index) => (
           <Card key={index}>
             <CardHeader>
-              <CardTitle>{media.title}</CardTitle>
+              <CardTitle>{language === "en" ? media.titleEn : media.titleEs}</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground mb-2">{media.date}</p>
+              <p className="text-sm text-muted-foreground mb-2">{language === "en" ? media.dateEn : media.dateEs}</p>
               {renderMediaContent(media)}
               {media.videoType === "iframe" && (
                 <a href={media.videoUrl} target="_blank" rel="noopener noreferrer" className="flex items-center mt-4 text-primary hover:underline">
-                  <Globe className="mr-2 h-4 w-4" /> Visit Website
+                  <Globe className="mr-2 h-4 w-4" /> {t("Visit Website", "Visitar Sitio")}
                 </a>
               )}
             </CardContent>
